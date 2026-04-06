@@ -2,10 +2,12 @@ import cors from "cors";
 import express from "express";
 import { toNodeHandler } from "better-auth/node";
 import logger from "@/lib/logger";
+import { RESPONSE_CODE, sendSuccess } from "@/lib/response";
 
 import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import demoRouter from "./routes/demo";
+import integrationsRouter from "./routes/integrations";
 
 const app = express();
 
@@ -48,9 +50,12 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 app.use("/api", demoRouter);
+app.use("/api", integrationsRouter);
 
 app.get("/health", (_req, res) => {
-  res.status(200).json({ status: "ok" });
+  return sendSuccess(res, RESPONSE_CODE.OK, "Health check passed", {
+    status: "ok",
+  });
 });
 
 app.listen(env.PORT, () => {
