@@ -59,7 +59,16 @@ createRoot(document.getElementById("root")!).render(
                     path="dashboard"
                     element={<Navigate to="/today" replace />}
                   />
-                  <Route path="demo" element={<DemoPage />} />
+                  <Route
+                    element={
+                      <RouteProtector
+                        allowedRoles={["manager", "admin"]}
+                        unauthorizedTo="/today"
+                      />
+                    }
+                  >
+                    <Route path="demo" element={<DemoPage />} />
+                  </Route>
                 </Route>
                 <Route path="*" element={<NotFoundPage />} />
               </Route>

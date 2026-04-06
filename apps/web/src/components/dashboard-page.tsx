@@ -11,9 +11,11 @@ import {
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { RoleBasedRender } from "@/components/role-based-render";
 import { authClient } from "@/lib/auth-client";
 import { env } from "@/lib/env";
 import { useIntegrationStatus } from "@/hooks/use-integrations";
+import { getSessionUserRole } from "@/lib/roles";
 
 function buildDashboardCallbackUrl(): string {
   return new URL("/today", env.VITE_WEB_BASE_URL).toString();
@@ -21,6 +23,7 @@ function buildDashboardCallbackUrl(): string {
 
 export function DashboardPage() {
   const { data: session } = authClient.useSession();
+  const userRole = getSessionUserRole(session);
   const navigate = useNavigate();
   const integrationStatusQuery = useIntegrationStatus(
     Boolean(session?.user?.id),
@@ -79,6 +82,16 @@ export function DashboardPage() {
           Your Atlassian account is connected through Better Auth. Use this area
           as the first protected page after login.
         </div>
+
+        <RoleBasedRender
+          role={userRole}
+          allowedRoles={["manager", "admin"]}
+          fallback={null}
+        >
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm text-primary">
+            You have elevated access to manager/admin-only routes.
+          </div>
+        </RoleBasedRender>
 
         <div className="rounded-xl border border-border/70 bg-background p-4">
           <div className="mb-3 text-sm font-medium">Integration status</div>
