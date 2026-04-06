@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { ErrorFallback } from "@/components/error-fallback";
 import { RouteProtector } from "@/components/route-protector";
 import { DashboardPage } from "@/components/dashboard-page";
-import { DemoPage } from "@/page/demo";
 import { LoginPage } from "@/page/login";
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -32,12 +31,32 @@ const NotFoundPage = () => {
   );
 };
 
+function getErrorDetails(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+
+  return {
+    name: "UnknownError",
+    message: String(error),
+    stack: undefined,
+  };
+}
+
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary
     FallbackComponent={ErrorFallback}
-    onReset={() => (window.location.href = "/")}
+    onReset={() => window.location.reload()}
     onError={(error, info) => {
-      console.error("Error caught by boundary:", error, info);
+      const errorDetails = getErrorDetails(error);
+      console.error("Error caught by boundary:", {
+        ...errorDetails,
+        componentStack: info.componentStack,
+      });
     }}
   >
     <QueryClientProvider client={queryClient}>
@@ -61,16 +80,6 @@ createRoot(document.getElementById("root")!).render(
                       path="dashboard"
                       element={<Navigate to="/today" replace />}
                     />
-                    <Route
-                      element={
-                        <RouteProtector
-                          allowedRoles={["manager", "admin"]}
-                          unauthorizedTo="/today"
-                        />
-                      }
-                    >
-                      <Route path="demo" element={<DemoPage />} />
-                    </Route>
                   </Route>
                   <Route path="*" element={<NotFoundPage />} />
                 </Route>

@@ -5,7 +5,6 @@ import {
   LayoutDashboard,
   LogOut,
   ShieldCheck,
-  Sparkles,
   User2,
 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
@@ -31,19 +30,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { authClient } from "@/lib/auth-client";
-import { getSessionUserRole, hasRequiredRole } from "@/lib/roles";
+import { getSessionUserRole } from "@/lib/roles";
 
 const navItems = [
   {
     title: "Today",
     to: "/today",
     icon: LayoutDashboard,
-  },
-  {
-    title: "Demo",
-    to: "/demo",
-    icon: Sparkles,
-    allowedRoles: ["manager", "admin"] as const,
   },
 ];
 
@@ -66,11 +59,7 @@ export function AppSidebar() {
     },
   });
 
-  const filteredNavItems = useMemo(
-    () =>
-      navItems.filter((item) => hasRequiredRole(userRole, item.allowedRoles)),
-    [userRole],
-  );
+  const filteredNavItems = useMemo(() => navItems, []);
 
   return (
     <Sidebar variant="inset" collapsible="icon">
