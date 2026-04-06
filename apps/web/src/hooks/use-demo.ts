@@ -3,10 +3,11 @@ import { fetchDemo, mutateDemo } from "../api/demo-api";
 import { toast } from "sonner";
 import { demoMutationSchema } from "../validations/demo";
 import type { DemoMutationInput } from "../types/demo";
+import { queryKeys } from "@/lib/query-keys";
 
 export function useDemoData() {
   const query = useQuery({
-    queryKey: ["demo-data"],
+    queryKey: queryKeys.demo(),
     queryFn: fetchDemo,
   });
 
