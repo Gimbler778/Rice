@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, Navigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ErrorBoundary } from "react-error-boundary";
 import { Toaster } from "sonner";
@@ -15,6 +15,7 @@ import { ErrorFallback } from "@/components/error-fallback";
 import { RouteProtector } from "@/components/route-protector";
 import { DashboardPage } from "@/components/dashboard-page";
 import { DemoPage } from "@/page/demo";
+import { LoginPage } from "@/page/login";
 
 // eslint-disable-next-line react-refresh/only-export-components
 const NotFoundPage = () => {
@@ -51,10 +52,15 @@ createRoot(document.getElementById("root")!).render(
           >
             <Routes>
               <Route path="/" element={<RootLayout />}>
+                <Route index element={<LoginPage />} />
                 <Route element={<RouteProtector />}>
-                  <Route path="dashboard" element={<DashboardPage />} />
+                  <Route path="today" element={<DashboardPage />} />
+                  <Route
+                    path="dashboard"
+                    element={<Navigate to="/today" replace />}
+                  />
+                  <Route path="demo" element={<DemoPage />} />
                 </Route>
-                <Route path="demo" element={<DemoPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Routes>

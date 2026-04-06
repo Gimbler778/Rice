@@ -1,10 +1,9 @@
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet } from "react-router-dom";
 
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
 
 export function RouteProtector() {
-  const location = useLocation();
   const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
@@ -16,7 +15,7 @@ export function RouteProtector() {
   }
 
   if (!session) {
-    return <Navigate to="/" replace state={{ from: location }} />;
+    return <Navigate to="/" replace />;
   }
 
   return <Outlet />;
