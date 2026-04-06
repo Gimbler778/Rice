@@ -1,14 +1,32 @@
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { LogOut, UserRound } from "lucide-react";
+import { Link2, LogOut, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import { env } from "@/lib/env";
+
+function buildDashboardCallbackUrl(): string {
+  return new URL("/today", env.VITE_WEB_BASE_URL).toString();
+}
 
 export function DashboardPage() {
   const { data: session } = authClient.useSession();
   const navigate = useNavigate();
+
+  const connectBitbucketMutation = useMutation({
+    mutationFn: async () => {
+      await authClient.oauth2.link({
+        providerId: "bitbucket",
+        callbackURL: buildDashboardCallbackUrl(),
+      });
+    },
+    onError: (error) => {
+      toast.error("Bitbucket connect failed. Please try again.");
+      console.error("Bitbucket link failed:", error);
+    },
+  });
 
   const signOutMutation = useMutation({
     mutationFn: async () => {
@@ -48,6 +66,18 @@ export function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => connectBitbucketMutation.mutate()}
+            disabled={connectBitbucketMutation.isPending}
+          >
+            <Link2 />
+            {connectBitbucketMutation.isPending
+              ? "Connecting Bitbucket..."
+              : "Connect Bitbucket"}
+          </Button>
+
           <Button
             type="button"
             variant="outline"
