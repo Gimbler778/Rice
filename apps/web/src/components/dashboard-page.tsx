@@ -1,11 +1,19 @@
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Link2, LogOut, UserRound } from "lucide-react";
+import {
+  CheckCircle2,
+  Link2,
+  LoaderCircle,
+  LogOut,
+  UserRound,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { env } from "@/lib/env";
+import { useIntegrationStatus } from "@/hooks/use-integrations";
 
 function buildDashboardCallbackUrl(): string {
   return new URL("/today", env.VITE_WEB_BASE_URL).toString();
@@ -14,6 +22,9 @@ function buildDashboardCallbackUrl(): string {
 export function DashboardPage() {
   const { data: session } = authClient.useSession();
   const navigate = useNavigate();
+  const integrationStatusQuery = useIntegrationStatus(
+    Boolean(session?.user?.id),
+  );
 
   const connectBitbucketMutation = useMutation({
     mutationFn: async () => {
@@ -21,6 +32,10 @@ export function DashboardPage() {
         providerId: "bitbucket",
         callbackURL: buildDashboardCallbackUrl(),
       });
+    },
+    onSuccess: async () => {
+      await integrationStatusQuery.refetch();
+      toast.success("Bitbucket connected");
     },
     onError: (error) => {
       toast.error("Bitbucket connect failed. Please try again.");
@@ -65,17 +80,58 @@ export function DashboardPage() {
           as the first protected page after login.
         </div>
 
+        <div className="rounded-xl border border-border/70 bg-background p-4">
+          <div className="mb-3 text-sm font-medium">Integration status</div>
+
+          {integrationStatusQuery.isPending ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <LoaderCircle className="size-4 animate-spin" />
+              Checking provider links...
+            </div>
+          ) : integrationStatusQuery.isError ? (
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <XCircle className="size-4" />
+              Failed to load integration status
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                {integrationStatusQuery.data?.atlassianConnected ? (
+                  <CheckCircle2 className="size-4 text-primary" />
+                ) : (
+                  <XCircle className="size-4 text-muted-foreground" />
+                )}
+                <span>Atlassian</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {integrationStatusQuery.data?.bitbucketConnected ? (
+                  <CheckCircle2 className="size-4 text-primary" />
+                ) : (
+                  <XCircle className="size-4 text-muted-foreground" />
+                )}
+                <span>Bitbucket</span>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-wrap gap-3">
           <Button
             type="button"
             variant="secondary"
             onClick={() => connectBitbucketMutation.mutate()}
-            disabled={connectBitbucketMutation.isPending}
+            disabled={
+              connectBitbucketMutation.isPending ||
+              integrationStatusQuery.data?.bitbucketConnected === true
+            }
           >
             <Link2 />
-            {connectBitbucketMutation.isPending
-              ? "Connecting Bitbucket..."
-              : "Connect Bitbucket"}
+            {integrationStatusQuery.data?.bitbucketConnected
+              ? "Bitbucket Connected"
+              : connectBitbucketMutation.isPending
+                ? "Connecting Bitbucket..."
+                : "Connect Bitbucket"}
           </Button>
 
           <Button
