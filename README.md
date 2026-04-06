@@ -8,7 +8,7 @@ A production-ready monorepo template with TypeScript, Express, React, and Postgr
 - **Backend**: Express 5.2 + TypeScript + Better Auth + Drizzle ORM
 - **Frontend**: React 19 + React Router + TanStack Query + Vite
 - **Database**: PostgreSQL + Drizzle Kit
-- **Auth**: Better Auth (email/password + Google OAuth)
+- **Auth**: Better Auth (Atlassian sign-in + Bitbucket account linking)
 - **Deployment**: Vercel ready (vercel.json config included)
 
 ## Project Structure
@@ -69,8 +69,13 @@ CORS_ORIGIN=http://localhost:5173
 DATABASE_URL=postgresql://admin:password@localhost:5432/odoo_db
 BETTER_AUTH_SECRET=your-secret-key-here
 BETTER_AUTH_URL=http://localhost:3000
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
+ATLASSIAN_CLIENT_ID=your-atlassian-client-id
+ATLASSIAN_CLIENT_SECRET=your-atlassian-client-secret
+BITBUCKET_CLIENT_ID=your-bitbucket-client-id
+BITBUCKET_CLIENT_SECRET=your-bitbucket-client-secret
+BITBUCKET_OAUTH_REDIRECT_URI=http://localhost:3000/api/auth/oauth2/callback/bitbucket
+RESEND_API_KEY=your-resend-api-key
+RESEND_FROM=App Name <noreply@yourdomain.com>
 ```
 
 **Frontend** (`apps/web/.env.local`):
@@ -106,6 +111,38 @@ pnpm dev:web
 
 - API: http://localhost:3000
 - Frontend: http://localhost:5173
+
+## OAuth Integration Plan
+
+### Step 1: Final Auth Flow Contract
+
+- Primary authentication is Atlassian sign-in.
+- Bitbucket is linked after login to the same user account.
+- Provider data remains split by source:
+  - Atlassian token for Atlassian APIs
+  - Bitbucket token for Bitbucket APIs
+
+### Step 2: Bitbucket OAuth Consumer Setup
+
+Create a Bitbucket OAuth consumer and configure these values:
+
+- Client ID: used as `BITBUCKET_CLIENT_ID`
+- Client Secret: used as `BITBUCKET_CLIENT_SECRET`
+- Callback URL (local): `http://localhost:3000/api/auth/oauth2/callback/bitbucket`
+
+For production, use your deployed API base URL with the same callback path:
+
+- `https://<your-api-domain>/api/auth/oauth2/callback/bitbucket`
+
+### Step 3: Environment Contract
+
+Ensure the API `.env` includes all required auth variables:
+
+- `ATLASSIAN_CLIENT_ID`
+- `ATLASSIAN_CLIENT_SECRET`
+- `BITBUCKET_CLIENT_ID`
+- `BITBUCKET_CLIENT_SECRET`
+- `BITBUCKET_OAUTH_REDIRECT_URI` (optional override, recommended for clarity)
 
 ## Scripts
 
