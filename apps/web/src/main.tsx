@@ -8,6 +8,7 @@ import "./index.css";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { queryClient } from "@/lib/query-client";
 import { Spinner } from "@/components/ui/spinner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { RootLayout } from "@/components/root-layout";
 import { PageContainer } from "./components/page-container";
 import { Button } from "@/components/ui/button";
@@ -41,40 +42,42 @@ createRoot(document.getElementById("root")!).render(
   >
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="system">
-        <BrowserRouter>
-          <Toaster position="top-center" richColors />
-          <Suspense
-            fallback={
-              <PageContainer className="grid place-items-center min-h-screen">
-                <Spinner />
-              </PageContainer>
-            }
-          >
-            <Routes>
-              <Route path="/" element={<RootLayout />}>
-                <Route index element={<LoginPage />} />
-                <Route element={<RouteProtector />}>
-                  <Route path="today" element={<DashboardPage />} />
-                  <Route
-                    path="dashboard"
-                    element={<Navigate to="/today" replace />}
-                  />
-                  <Route
-                    element={
-                      <RouteProtector
-                        allowedRoles={["manager", "admin"]}
-                        unauthorizedTo="/today"
-                      />
-                    }
-                  >
-                    <Route path="demo" element={<DemoPage />} />
+        <TooltipProvider>
+          <BrowserRouter>
+            <Toaster position="top-center" richColors />
+            <Suspense
+              fallback={
+                <PageContainer className="grid place-items-center min-h-screen">
+                  <Spinner />
+                </PageContainer>
+              }
+            >
+              <Routes>
+                <Route path="/" element={<RootLayout />}>
+                  <Route index element={<LoginPage />} />
+                  <Route element={<RouteProtector />}>
+                    <Route path="today" element={<DashboardPage />} />
+                    <Route
+                      path="dashboard"
+                      element={<Navigate to="/today" replace />}
+                    />
+                    <Route
+                      element={
+                        <RouteProtector
+                          allowedRoles={["manager", "admin"]}
+                          unauthorizedTo="/today"
+                        />
+                      }
+                    >
+                      <Route path="demo" element={<DemoPage />} />
+                    </Route>
                   </Route>
+                  <Route path="*" element={<NotFoundPage />} />
                 </Route>
-                <Route path="*" element={<NotFoundPage />} />
-              </Route>
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
   </ErrorBoundary>,
