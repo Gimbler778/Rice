@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   CheckCircle2,
+  Link,
   Link2,
   LoaderCircle,
   LogOut,
@@ -43,6 +44,23 @@ export function DashboardPage() {
     onError: (error) => {
       toast.error("Bitbucket connect failed. Please try again.");
       console.error("Bitbucket link failed:", error);
+    },
+  });
+
+  const connectAtlassianMutation = useMutation({
+    mutationFn: async () => {
+      await authClient.linkSocial({
+        provider: "atlassian",
+        callbackURL: buildDashboardCallbackUrl(),
+      });
+    },
+    onSuccess: async () => {
+      await integrationStatusQuery.refetch();
+      toast.success("Atlassian connected");
+    },
+    onError: (error) => {
+      toast.error("Atlassian connect failed. Please try again.");
+      console.error("Atlassian link failed:", error);
     },
   });
 
@@ -130,6 +148,23 @@ export function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => connectAtlassianMutation.mutate()}
+            disabled={
+              connectAtlassianMutation.isPending ||
+              integrationStatusQuery.data?.atlassianConnected === true
+            }
+          >
+            <Link />
+            {integrationStatusQuery.data?.atlassianConnected
+              ? "Atlassian Connected"
+              : connectAtlassianMutation.isPending
+                ? "Connecting Atlassian..."
+                : "Connect Atlassian"}
+          </Button>
+
           <Button
             type="button"
             variant="secondary"
