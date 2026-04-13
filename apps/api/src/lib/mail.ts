@@ -13,8 +13,11 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Transactional mail via Resend (e.g. notifications) — not wired to Better Auth. */
-export async function sendPasswordResetEmail(to: string, url: string): Promise<void> {
+/** Transactional mail via Resend used by Better Auth and app notifications. */
+export async function sendPasswordResetEmail(
+  to: string,
+  url: string,
+): Promise<void> {
   return resend.emails
     .send({
       from: env.RESEND_FROM,

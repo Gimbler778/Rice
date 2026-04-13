@@ -4,6 +4,7 @@ import { genericOAuth } from "better-auth/plugins";
 
 import { db } from "@/db/client";
 import { env } from "@/lib/env";
+import { sendPasswordResetEmail, sendVerificationEmail } from "@/lib/mail";
 import * as schema from "@/db/schema/index";
 
 export const auth = betterAuth({
@@ -23,10 +24,25 @@ export const auth = betterAuth({
       },
     },
   },
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: true,
+    sendResetPassword: async ({ user, url }) => {
+      void sendPasswordResetEmail(user.email, url);
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    sendOnSignIn: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      void sendVerificationEmail(user.email, url, user.name);
+    },
+  },
   socialProviders: {
     atlassian: {
       clientId: env.ATLASSIAN_CLIENT_ID,
       clientSecret: env.ATLASSIAN_CLIENT_SECRET,
+      disableSignUp: true,
       scope: [
         "read:me",
         "read:account",
