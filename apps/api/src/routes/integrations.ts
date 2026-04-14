@@ -1,11 +1,15 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import { account } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
-import { fetchAllJiraIssues, resolveJiraResource } from "@/lib/jira";
+import {
+  fetchAllJiraIssues,
+  isAtlassianUnauthorizedError,
+  resolveJiraResource,
+} from "@/lib/jira";
 import logger from "@/lib/logger";
 import { RESPONSE_CODE, sendError, sendSuccess } from "@/lib/response";
 import { tryCatch } from "@/lib/try-catch";
@@ -18,6 +22,18 @@ type ConnectedAccount = {
   refreshToken: string | null;
   accessTokenExpiresAt: Date | null;
 };
+
+type RequestAccountsResult =
+  | {
+      ok: true;
+      userId: string;
+      linkedAccounts: ConnectedAccount[];
+    }
+  | {
+      ok: false;
+      code: number;
+      message: string;
+    };
 
 type BitbucketWorkspace = {
   slug?: string;
@@ -41,6 +57,7 @@ type DashboardEntry = {
   link: string | null;
   occurredAt: string;
   relatedData?: {
+    issueKey?: string | null;
     projectKey: string | null;
     projectName: string | null;
     issueType: string | null;
@@ -49,6 +66,22 @@ type DashboardEntry = {
     parentKey: string | null;
     labels: string[];
     linkedIssueKeys: string[];
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    repositoryFullName?: string | null;
+    repositorySlug?: string | null;
+    workspace?: string | null;
+    commitHash?: string | null;
+    commitMessage?: string | null;
+    commitTimestamp?: string | null;
+    pullRequestId?: number | null;
+    pullRequestTitle?: string | null;
+    pullRequestState?: string | null;
+    pullRequestUrl?: string | null;
+    pullRequestTimestamp?: string | null;
+    sourceBranch?: string | null;
+    destinationBranch?: string | null;
+    branch?: string | null;
   };
 };
 
@@ -117,6 +150,49 @@ async function fetchConnectedAccounts(userId: string) {
   );
 }
 
+async function resolveRequestAccounts(
+  reqHeaders: Record<string, string | string[] | undefined>,
+): Promise<RequestAccountsResult> {
+  const { userId, error: sessionError } = await resolveSessionUserId(reqHeaders);
+
+  if (sessionError) {
+    logger.error({ err: sessionError }, "Failed to resolve auth session");
+    return {
+      ok: false,
+      code: RESPONSE_CODE.INTERNAL_SERVER_ERROR,
+      message: "Failed to resolve auth session",
+    };
+  }
+
+  if (!userId) {
+    return {
+      ok: false,
+      code: RESPONSE_CODE.UNAUTHORIZED,
+      message: "Unauthorized",
+    };
+  }
+
+  const { data: linkedAccounts, error: accountError } = await fetchConnectedAccounts(userId);
+
+  if (accountError) {
+    logger.error(
+      { err: accountError, userId },
+      "Failed to fetch linked accounts",
+    );
+    return {
+      ok: false,
+      code: RESPONSE_CODE.INTERNAL_SERVER_ERROR,
+      message: "Failed to fetch linked account data",
+    };
+  }
+
+  return {
+    ok: true,
+    userId,
+    linkedAccounts,
+  };
+}
+
 function getConnectedProviders(linkedAccounts: ConnectedAccount[]) {
   return Array.from(new Set(linkedAccounts.map((entry) => entry.providerId)));
 }
@@ -156,6 +232,164 @@ function formatDuration(seconds: number) {
 function buildBitbucketBasicAuthHeader() {
   const credentials = `${env.BITBUCKET_CLIENT_ID}:${env.BITBUCKET_CLIENT_SECRET}`;
   return `Basic ${Buffer.from(credentials).toString("base64")}`;
+}
+
+function computeAccessTokenExpiresAt(expiresInSeconds?: number) {
+  if (!expiresInSeconds || expiresInSeconds <= 0) {
+    return null;
+  }
+
+  return new Date(Date.now() + expiresInSeconds * 1000);
+}
+
+async function refreshAtlassianAccessToken(refreshToken: string) {
+  const tokenResponse = await fetch("https://auth.atlassian.com/oauth/token", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      grant_type: "refresh_token",
+      client_id: env.ATLASSIAN_CLIENT_ID,
+      client_secret: env.ATLASSIAN_CLIENT_SECRET,
+      refresh_token: refreshToken,
+    }),
+  });
+
+  if (!tokenResponse.ok) {
+    const errorText = await tokenResponse.text();
+    throw new Error(
+      `Unable to refresh Atlassian access token (${tokenResponse.status}): ${errorText || tokenResponse.statusText}`,
+    );
+  }
+
+  const tokenPayload = (await tokenResponse.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+  };
+
+  if (!tokenPayload.access_token) {
+    throw new Error("Atlassian refresh response did not include an access token");
+  }
+
+  return {
+    accessToken: tokenPayload.access_token,
+    refreshToken: tokenPayload.refresh_token ?? refreshToken,
+    accessTokenExpiresAt: computeAccessTokenExpiresAt(tokenPayload.expires_in),
+  };
+}
+
+async function persistRefreshedAccountTokens(
+  userId: string,
+  providerId: string,
+  refreshedTokens: {
+    accessToken: string;
+    refreshToken?: string | null;
+    accessTokenExpiresAt?: Date | null;
+  },
+) {
+  await db
+    .update(account)
+    .set({
+      accessToken: refreshedTokens.accessToken,
+      refreshToken: refreshedTokens.refreshToken ?? null,
+      accessTokenExpiresAt: refreshedTokens.accessTokenExpiresAt ?? null,
+    })
+    .where(and(eq(account.userId, userId), eq(account.providerId, providerId)));
+}
+
+async function fetchAtlassianEntriesWithRefresh(
+  userId: string,
+  atlassianAccount: ConnectedAccount | undefined,
+) {
+  if (!atlassianAccount?.accessToken) {
+    return {
+      entries: [] as DashboardEntry[],
+      failed: false,
+    };
+  }
+
+  let atlassianAccessToken = atlassianAccount.accessToken;
+
+  if (
+    atlassianAccount.accessTokenExpiresAt &&
+    atlassianAccount.accessTokenExpiresAt.getTime() <= Date.now() &&
+    atlassianAccount.refreshToken
+  ) {
+    const { data: refreshedTokens, error: refreshError } = await tryCatch(
+      refreshAtlassianAccessToken(atlassianAccount.refreshToken),
+    );
+
+    if (refreshError) {
+      logger.warn(
+        { err: refreshError, userId },
+        "Failed to refresh Atlassian access token",
+      );
+    } else {
+      atlassianAccessToken = refreshedTokens.accessToken;
+
+      const { error: persistError } = await tryCatch(
+        persistRefreshedAccountTokens(userId, "atlassian", refreshedTokens),
+      );
+
+      if (persistError) {
+        logger.warn(
+          { err: persistError, userId },
+          "Failed to persist refreshed Atlassian tokens",
+        );
+      }
+    }
+  }
+
+  const runJiraFetch = async () => fetchJiraEntries(atlassianAccessToken);
+  let jiraResult = await tryCatch(runJiraFetch());
+
+  if (
+    jiraResult.error &&
+    atlassianAccount.refreshToken &&
+    isAtlassianUnauthorizedError(jiraResult.error)
+  ) {
+    const { data: refreshedTokens, error: refreshError } = await tryCatch(
+      refreshAtlassianAccessToken(atlassianAccount.refreshToken),
+    );
+
+    if (!refreshError) {
+      atlassianAccessToken = refreshedTokens.accessToken;
+
+      const { error: persistError } = await tryCatch(
+        persistRefreshedAccountTokens(userId, "atlassian", refreshedTokens),
+      );
+
+      if (persistError) {
+        logger.warn(
+          { err: persistError, userId },
+          "Failed to persist refreshed Atlassian tokens",
+        );
+      }
+
+      jiraResult = await tryCatch(runJiraFetch());
+    } else {
+      logger.warn(
+        { err: refreshError, userId },
+        "Failed to refresh Atlassian token after unauthorized Jira response",
+      );
+    }
+  }
+
+  if (jiraResult.error) {
+    logger.warn({ err: jiraResult.error, userId }, "Failed to fetch Jira entries");
+    return {
+      entries: [] as DashboardEntry[],
+      failed: true,
+    };
+  }
+
+  return {
+    entries: jiraResult.data,
+    failed: false,
+  };
 }
 
 async function fetchBitbucketPaginatedValues<T>(url: string, accessToken: string) {
@@ -326,6 +560,7 @@ async function fetchJiraEntries(accessToken: string): Promise<DashboardEntry[]> 
       link: jiraSiteUrl && issue.key ? `${jiraSiteUrl}/browse/${issue.key}` : issue.self,
       occurredAt: issue.updated,
       relatedData: {
+        issueKey: issue.key,
         projectKey: issue.projectKey,
         projectName: issue.projectName,
         issueType: issue.issueType,
@@ -334,6 +569,22 @@ async function fetchJiraEntries(accessToken: string): Promise<DashboardEntry[]> 
         parentKey: issue.parentKey,
         labels: issue.labels,
         linkedIssueKeys: issue.linkedIssueKeys,
+        createdAt: issue.created,
+        updatedAt: issue.updated,
+        repositoryFullName: null,
+        repositorySlug: null,
+        workspace: null,
+        commitHash: null,
+        commitMessage: null,
+        commitTimestamp: null,
+        pullRequestId: null,
+        pullRequestTitle: null,
+        pullRequestState: null,
+        pullRequestUrl: null,
+        pullRequestTimestamp: null,
+        sourceBranch: null,
+        destinationBranch: null,
+        branch: null,
       },
     };
   });
@@ -408,6 +659,51 @@ async function fetchBitbucketEntries(accountEntry: ConnectedAccount): Promise<Da
     }>;
   };
 
+  const fetchRepositoryPullRequests = async (token: string, repository: BitbucketRepository) => {
+    const pullRequestsResponse = await fetch(
+      `https://api.bitbucket.org/2.0/repositories/${repository.workspace}/${repository.slug}/pullrequests?sort=-updated_on&pagelen=3`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+
+    if (!pullRequestsResponse.ok) {
+      const errorText = await pullRequestsResponse.text();
+      throw new BitbucketApiError(
+        pullRequestsResponse.status,
+        `Unable to fetch Bitbucket pull requests (${pullRequestsResponse.status}): ${errorText || pullRequestsResponse.statusText}`,
+      );
+    }
+
+    return pullRequestsResponse.json() as Promise<{
+      values?: Array<{
+        id?: number;
+        title?: string;
+        state?: string;
+        created_on?: string;
+        updated_on?: string;
+        source?: {
+          branch?: {
+            name?: string;
+          };
+        };
+        destination?: {
+          branch?: {
+            name?: string;
+          };
+        };
+        links?: {
+          html?: {
+            href?: string;
+          };
+        };
+      }>;
+    }>;
+  };
+
   for (const repository of repositories) {
     let commitsPayload: {
       values?: Array<{
@@ -452,6 +748,121 @@ async function fetchBitbucketEntries(accountEntry: ConnectedAccount): Promise<Da
         time: formatDuration(timeSeconds),
         link: commit.links?.html?.href ?? repository.htmlUrl,
         occurredAt: commit.date ?? new Date().toISOString(),
+        relatedData: {
+          issueKey: null,
+          projectKey: null,
+          projectName: null,
+          issueType: null,
+          status: null,
+          assignee: null,
+          parentKey: null,
+          labels: [],
+          linkedIssueKeys: [],
+          createdAt: null,
+          updatedAt: commit.date ?? null,
+          repositoryFullName: repository.fullName,
+          repositorySlug: repository.slug,
+          workspace: repository.workspace,
+          commitHash: shortHash,
+          commitMessage: (commit.message ?? "No message").split("\n")[0],
+          commitTimestamp: commit.date ?? null,
+          pullRequestId: null,
+          pullRequestTitle: null,
+          pullRequestState: null,
+          pullRequestUrl: null,
+          pullRequestTimestamp: null,
+          sourceBranch: null,
+          destinationBranch: null,
+          branch: null,
+        },
+      });
+    }
+
+    let pullRequestsPayload: {
+      values?: Array<{
+        id?: number;
+        title?: string;
+        state?: string;
+        created_on?: string;
+        updated_on?: string;
+        source?: {
+          branch?: {
+            name?: string;
+          };
+        };
+        destination?: {
+          branch?: {
+            name?: string;
+          };
+        };
+        links?: {
+          html?: {
+            href?: string;
+          };
+        };
+      }>;
+    };
+
+    try {
+      pullRequestsPayload = await fetchRepositoryPullRequests(accessToken, repository);
+    } catch (error) {
+      if (!accountEntry.refreshToken || !isBitbucketUnauthorizedError(error)) {
+        continue;
+      }
+
+      accessToken = await refreshBitbucketAccessToken(accountEntry.refreshToken);
+
+      try {
+        pullRequestsPayload = await fetchRepositoryPullRequests(accessToken, repository);
+      } catch {
+        continue;
+      }
+    }
+
+    for (const pullRequest of pullRequestsPayload.values ?? []) {
+      const prId = pullRequest.id ?? 0;
+      const sourceBranch = pullRequest.source?.branch?.name ?? null;
+      const destinationBranch = pullRequest.destination?.branch?.name ?? null;
+      const occurredAt = pullRequest.updated_on ?? pullRequest.created_on ?? new Date().toISOString();
+      const timeSeconds = 45 * 60;
+
+      entries.push({
+        id: `bitbucket-pr-${repository.workspace}-${repository.slug}-${prId || crypto.randomUUID()}`,
+        category: "Code Review",
+        description: `${repository.fullName} - PR #${prId} - ${pullRequest.title ?? "Untitled pull request"}`,
+        ref: prId ? `PR-${prId}` : "PR",
+        source: "Bitbucket",
+        timeSeconds,
+        time: formatDuration(timeSeconds),
+        link: pullRequest.links?.html?.href ?? repository.htmlUrl,
+        occurredAt,
+        relatedData: {
+          issueKey: null,
+          projectKey: null,
+          projectName: null,
+          issueType: null,
+          status: null,
+          assignee: null,
+          parentKey: null,
+          labels: [],
+          linkedIssueKeys: [],
+          createdAt: pullRequest.created_on ?? null,
+          updatedAt: pullRequest.updated_on ?? null,
+          repositoryFullName: repository.fullName,
+          repositorySlug: repository.slug,
+          workspace: repository.workspace,
+          commitHash: null,
+          commitMessage: null,
+          commitTimestamp: null,
+          pullRequestId: prId || null,
+          pullRequestTitle: pullRequest.title ?? null,
+          pullRequestState: pullRequest.state ?? null,
+          pullRequestUrl: pullRequest.links?.html?.href ?? null,
+          pullRequestTimestamp: occurredAt,
+          sourceBranch,
+          destinationBranch,
+          branch: sourceBranch ?? destinationBranch,
+        },
       });
     }
   }
@@ -460,34 +871,17 @@ async function fetchBitbucketEntries(accountEntry: ConnectedAccount): Promise<Da
 }
 
 router.get("/integrations/status", async (req, res) => {
-  const { userId, error: sessionError } = await resolveSessionUserId(req.headers);
+  const requestAccounts = await resolveRequestAccounts(req.headers);
 
-  if (sessionError) {
-    logger.error({ err: sessionError }, "Failed to resolve auth session");
+  if (!requestAccounts.ok) {
     return sendError(
       res,
-      RESPONSE_CODE.INTERNAL_SERVER_ERROR,
-      "Failed to resolve auth session",
+      requestAccounts.code,
+      requestAccounts.message,
     );
   }
 
-  if (!userId) {
-    return sendError(res, RESPONSE_CODE.UNAUTHORIZED, "Unauthorized");
-  }
-
-  const { data: linkedAccounts, error: accountError } = await fetchConnectedAccounts(userId);
-
-  if (accountError) {
-    logger.error(
-      { err: accountError, userId },
-      "Failed to fetch linked accounts",
-    );
-    return sendError(
-      res,
-      RESPONSE_CODE.INTERNAL_SERVER_ERROR,
-      "Failed to fetch linked account status",
-    );
-  }
+  const { linkedAccounts } = requestAccounts;
 
   const { connectedProviders, atlassianConnected, bitbucketConnected } =
     getConnectionStatus(linkedAccounts);
@@ -505,39 +899,23 @@ router.get("/integrations/status", async (req, res) => {
 });
 
 router.get("/integrations/timesheet", async (req, res) => {
-  const { userId, error: sessionError } = await resolveSessionUserId(req.headers);
+  const requestAccounts = await resolveRequestAccounts(req.headers);
 
-  if (sessionError) {
-    logger.error({ err: sessionError }, "Failed to resolve auth session");
+  if (!requestAccounts.ok) {
     return sendError(
       res,
-      RESPONSE_CODE.INTERNAL_SERVER_ERROR,
-      "Failed to resolve auth session",
+      requestAccounts.code,
+      requestAccounts.message,
     );
   }
 
-  if (!userId) {
-    return sendError(res, RESPONSE_CODE.UNAUTHORIZED, "Unauthorized");
-  }
-
-  const { data: linkedAccounts, error: accountError } = await fetchConnectedAccounts(userId);
-  if (accountError) {
-    logger.error(
-      { err: accountError, userId },
-      "Failed to fetch linked accounts",
-    );
-    return sendError(
-      res,
-      RESPONSE_CODE.INTERNAL_SERVER_ERROR,
-      "Failed to fetch linked account data",
-    );
-  }
+  const { userId, linkedAccounts } = requestAccounts;
 
   const { connectedProviders, atlassianConnected, bitbucketConnected } =
     getConnectionStatus(linkedAccounts);
-  const atlassianToken = linkedAccounts.find(
+  const atlassianAccount = linkedAccounts.find(
     (entry) => entry.providerId === "atlassian",
-  )?.accessToken;
+  );
   const directBitbucketAccount = linkedAccounts.find(
     (entry) => entry.providerId === "bitbucket",
   );
@@ -545,14 +923,11 @@ router.get("/integrations/timesheet", async (req, res) => {
   const partialFailures: string[] = [];
   let entries: DashboardEntry[] = [];
 
-  if (atlassianToken) {
-    const { data, error } = await tryCatch(fetchJiraEntries(atlassianToken));
-    if (error) {
-      logger.warn({ err: error, userId }, "Failed to fetch Jira entries");
-      partialFailures.push("jira");
-    } else {
-      entries = [...entries, ...data];
-    }
+  const jiraResult = await fetchAtlassianEntriesWithRefresh(userId, atlassianAccount);
+  if (jiraResult.failed) {
+    partialFailures.push("jira");
+  } else {
+    entries = [...entries, ...jiraResult.entries];
   }
 
   if (directBitbucketAccount) {

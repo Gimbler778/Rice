@@ -18,25 +18,3 @@ export async function fetchIntegrationTimesheet() {
   );
   return response.data;
 }
-
-export async function testIntegrations() {
-  const response = await api.get<
-    ApiSuccessResponse<{
-      userId: string;
-      testResults: Array<{
-        providerName: string;
-        isConnected: boolean;
-        expiresAt?: string;
-        tests: Array<{
-          name: string;
-          passed: boolean;
-          error?: string;
-          data?: unknown;
-        }>;
-      }>;
-      allTestsPassed: boolean;
-      testedAt: string;
-    }>
-  >("/api/integrations/test");
-  return response.data;
-}

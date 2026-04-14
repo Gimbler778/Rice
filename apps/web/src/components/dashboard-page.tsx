@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   CheckCircle2,
+  ChevronDown,
   CircleDashed,
   Clock3,
   ExternalLink,
@@ -17,7 +18,11 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { IntegrationTestResults } from "@/components/integration-test-results";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { RoleBasedRender } from "@/components/role-based-render";
 import { authClient } from "@/lib/auth-client";
 import { env } from "@/lib/env";
@@ -26,6 +31,7 @@ import {
   useIntegrationTimesheet,
 } from "@/hooks/use-integrations";
 import { getSessionUserRole } from "@/lib/roles";
+import type { IntegrationTimesheetEntry } from "@/types/integrations";
 
 function buildDashboardCallbackUrl(): string {
   return new URL("/today", env.VITE_WEB_BASE_URL).toString();
@@ -38,6 +44,95 @@ function toHoursLabel(totalSeconds: number): string {
 
   const rounded = Math.round((totalSeconds / 3600) * 10) / 10;
   return `${rounded}h`;
+}
+
+function formatDateTime(value?: string | null): string {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString();
+}
+
+function renderEntryDetails(entry: IntegrationTimesheetEntry) {
+  const relatedData = entry.relatedData;
+
+  return (
+    <div className="w-[360px] space-y-3 p-2 text-sm">
+      <div className="space-y-1">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">Entry</p>
+        <div className="grid grid-cols-[120px_1fr] gap-y-1">
+          <span className="text-muted-foreground">Source</span>
+          <span>{entry.source}</span>
+          <span className="text-muted-foreground">Reference</span>
+          <span>{entry.ref}</span>
+          <span className="text-muted-foreground">Occurred</span>
+          <span>{formatDateTime(entry.occurredAt)}</span>
+        </div>
+      </div>
+
+      {entry.source === "Jira" ? (
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Jira</p>
+          <div className="grid grid-cols-[120px_1fr] gap-y-1">
+            <span className="text-muted-foreground">Issue</span>
+            <span>{relatedData?.issueKey ?? entry.ref}</span>
+            <span className="text-muted-foreground">Assignee</span>
+            <span>{relatedData?.assignee ?? "-"}</span>
+            <span className="text-muted-foreground">Status</span>
+            <span>{relatedData?.status ?? "-"}</span>
+            <span className="text-muted-foreground">Issue type</span>
+            <span>{relatedData?.issueType ?? "-"}</span>
+            <span className="text-muted-foreground">Project</span>
+            <span>{relatedData?.projectKey ?? "-"}</span>
+            <span className="text-muted-foreground">Created</span>
+            <span>{formatDateTime(relatedData?.createdAt)}</span>
+            <span className="text-muted-foreground">Updated</span>
+            <span>{formatDateTime(relatedData?.updatedAt)}</span>
+            <span className="text-muted-foreground">Linked issues</span>
+            <span>
+              {relatedData?.linkedIssueKeys?.length
+                ? relatedData.linkedIssueKeys.join(", ")
+                : "-"}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Bitbucket</p>
+          <div className="grid grid-cols-[120px_1fr] gap-y-1">
+            <span className="text-muted-foreground">Repository</span>
+            <span>{relatedData?.repositoryFullName ?? "-"}</span>
+            <span className="text-muted-foreground">Commit</span>
+            <span>{relatedData?.commitHash ?? "-"}</span>
+            <span className="text-muted-foreground">PR</span>
+            <span>
+              {relatedData?.pullRequestId
+                ? `#${relatedData.pullRequestId}`
+                : "-"}
+            </span>
+            <span className="text-muted-foreground">Branch</span>
+            <span>{relatedData?.branch ?? "-"}</span>
+            <span className="text-muted-foreground">Source branch</span>
+            <span>{relatedData?.sourceBranch ?? "-"}</span>
+            <span className="text-muted-foreground">Target branch</span>
+            <span>{relatedData?.destinationBranch ?? "-"}</span>
+            <span className="text-muted-foreground">PR status</span>
+            <span>{relatedData?.pullRequestState ?? "-"}</span>
+            <span className="text-muted-foreground">Commit timestamp</span>
+            <span>{formatDateTime(relatedData?.commitTimestamp)}</span>
+            <span className="text-muted-foreground">PR timestamp</span>
+            <span>{formatDateTime(relatedData?.pullRequestTimestamp)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function DashboardPage() {
@@ -265,19 +360,33 @@ export function DashboardPage() {
                             </td>
                             <td className="py-3 pr-4 font-semibold">{entry.time}</td>
                             <td className="py-3">
-                              {entry.link ? (
-                                <Button size="sm" variant="ghost" asChild>
-                                  <a href={entry.link} target="_blank" rel="noreferrer">
+                              <div className="flex items-center gap-1">
+                                {entry.link ? (
+                                  <Button size="sm" variant="ghost" asChild>
+                                    <a href={entry.link} target="_blank" rel="noreferrer">
+                                      <Clock3 />
+                                      Open
+                                    </a>
+                                  </Button>
+                                ) : (
+                                  <Button size="sm" variant="ghost" disabled>
                                     <Clock3 />
                                     Open
-                                  </a>
-                                </Button>
-                              ) : (
-                                <Button size="sm" variant="ghost" disabled>
-                                  <Clock3 />
-                                  Open
-                                </Button>
-                              )}
+                                  </Button>
+                                )}
+
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button size="sm" variant="ghost">
+                                      Details
+                                      <ChevronDown className="size-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-auto">
+                                    {renderEntryDetails(entry)}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -399,8 +508,6 @@ export function DashboardPage() {
               refresh interval.
             </p>
           </div>
-
-          <IntegrationTestResults />
 
         </CardContent>
       </Card>

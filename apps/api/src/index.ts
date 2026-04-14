@@ -7,7 +7,6 @@ import { RESPONSE_CODE, sendSuccess } from "@/lib/response";
 import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import integrationsRouter from "./routes/integrations";
-import integrationsTestRouter from "./routes/integrations-test";
 
 const app = express();
 
@@ -50,7 +49,6 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 app.use("/api", integrationsRouter);
-app.use("/api", integrationsTestRouter);
 
 app.get("/health", (_req, res) => {
   return sendSuccess(res, RESPONSE_CODE.OK, "Health check passed", {

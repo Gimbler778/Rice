@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   fetchIntegrationStatus,
   fetchIntegrationTimesheet,
-  testIntegrations,
 } from "@/api/integrations-api";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -21,13 +20,5 @@ export function useIntegrationTimesheet(enabled = true) {
     queryFn: fetchIntegrationTimesheet,
     enabled,
     refetchInterval: 30_000,
-  });
-}
-
-export function useIntegrationTest(enabled = true) {
-  return useQuery({
-    queryKey: queryKeys.integrations.test(),
-    queryFn: testIntegrations,
-    enabled,
   });
 }

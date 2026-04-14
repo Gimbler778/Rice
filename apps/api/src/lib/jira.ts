@@ -67,6 +67,20 @@ type JiraSearchResponse = {
   nextPageToken?: string;
 };
 
+export class AtlassianApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "AtlassianApiError";
+    this.status = status;
+  }
+}
+
+export function isAtlassianUnauthorizedError(error: unknown) {
+  return error instanceof AtlassianApiError && error.status === 401;
+}
+
 function uniqueStrings(values: Array<string | undefined | null>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
@@ -84,7 +98,8 @@ export async function resolveJiraResource(accessToken: string) {
 
   if (!resourcesResponse.ok) {
     const errorText = await resourcesResponse.text();
-    throw new Error(
+    throw new AtlassianApiError(
+      resourcesResponse.status,
       `Unable to resolve Atlassian resources (${resourcesResponse.status}): ${errorText || resourcesResponse.statusText}`,
     );
   }
@@ -141,7 +156,8 @@ export async function fetchAllJiraIssues(accessToken: string, cloudId: string) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(
+      throw new AtlassianApiError(
+        response.status,
         `Unable to fetch Jira issues (${response.status}): ${errorText || response.statusText}`,
       );
     }

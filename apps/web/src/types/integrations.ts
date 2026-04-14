@@ -22,6 +22,7 @@ export interface IntegrationTimesheetEntry {
   link: string | null;
   occurredAt: string;
   relatedData?: {
+    issueKey?: string | null;
     projectKey: string | null;
     projectName: string | null;
     issueType: string | null;
@@ -30,6 +31,22 @@ export interface IntegrationTimesheetEntry {
     parentKey: string | null;
     labels: string[];
     linkedIssueKeys: string[];
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    repositoryFullName?: string | null;
+    repositorySlug?: string | null;
+    workspace?: string | null;
+    commitHash?: string | null;
+    commitMessage?: string | null;
+    commitTimestamp?: string | null;
+    pullRequestId?: number | null;
+    pullRequestTitle?: string | null;
+    pullRequestState?: string | null;
+    pullRequestUrl?: string | null;
+    pullRequestTimestamp?: string | null;
+    sourceBranch?: string | null;
+    destinationBranch?: string | null;
+    branch?: string | null;
   };
 }
 
