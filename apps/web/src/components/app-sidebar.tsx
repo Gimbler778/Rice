@@ -1,15 +1,20 @@
-import { useMemo } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import {
-  ChevronUp,
-  LayoutDashboard,
-  LogOut,
-  ShieldCheck,
-  User2,
-} from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
-import { toast } from "sonner";
+// =============================================================================
+// RICE — App Sidebar
+// =============================================================================
+// Uses the existing shadcn sidebar primitives from src/components/ui/sidebar.tsx
+// Navigation links are role-aware: managers/admins see Team view under Reports.
+// Replace `userRole` mock with actual session role once RBAC is wired up.
+// =============================================================================
 
+import { Link, useLocation } from "react-router-dom";
+import {
+  CalendarDays,
+  CalendarRange,
+  BarChart3,
+  Settings,
+  LogOut,
+  History,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -21,126 +26,230 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { authClient } from "@/lib/auth-client";
-import { getSessionUserRole } from "@/lib/roles";
+import { useNavigate } from "react-router-dom";
 
-const navItems = [
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type UserRole = "developer" | "manager" | "admin" | "auditor";
+
+// ---------------------------------------------------------------------------
+// Nav config
+// ---------------------------------------------------------------------------
+
+const workspaceNav = [
   {
-    title: "Today",
-    to: "/today",
-    icon: LayoutDashboard,
+    label: "Today",
+    href: "/today",
+    icon: CalendarDays,
+  },
+  {
+    label: "My week",
+    href: "/week",
+    icon: CalendarRange,
+  },
+  {
+    label: "Logs history",
+    href: "/logs",
+    icon: History,
   },
 ];
+
+const reportsNav = [
+  {
+    label: "My reports",
+    href: "/reports",
+    icon: BarChart3,
+    roles: ["developer", "manager", "admin", "auditor"] as UserRole[],
+  },
+  {
+    label: "Team view",
+    href: "/reports/team",
+    icon: BarChart3,
+    // Only managers and admins see team view
+    roles: ["manager", "admin"] as UserRole[],
+  },
+];
+
+const adminNav = [
+  {
+    label: "Admin panel",
+    href: "/admin",
+    icon: Settings,
+    roles: ["admin"] as UserRole[],
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
-  const userRole = getSessionUserRole(session);
 
-  const signOutMutation = useMutation({
-    mutationFn: async () => {
-      await authClient.signOut();
-    },
-    onSuccess: () => {
-      toast.success("Signed out");
-      navigate("/", { replace: true });
-    },
-    onError: () => {
-      toast.error("Sign out failed. Please try again.");
-    },
-  });
+  // TODO: Replace with real role from session once RBAC is wired
+  // e.g. const userRole = session?.user.role as UserRole ?? "developer"
+  const userRole: UserRole = "developer";
 
-  const filteredNavItems = useMemo(() => navItems, []);
+  const userInitials = session?.user?.name
+    ? session.user.name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "?";
+
+  const handleSignOut = async () => {
+    await authClient.signOut();
+    navigate("/");
+  };
 
   return (
-    <Sidebar variant="inset" collapsible="icon">
+    <Sidebar collapsible="icon">
+      {/* ------------------------------------------------------------------ */}
+      {/* Logo */}
+      {/* ------------------------------------------------------------------ */}
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild size="lg" tooltip="IQM Rice Workspace">
-              <NavLink to="/today">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  IQ
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">IQM Rice</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    Atlassian workspace
-                  </span>
-                </div>
-              </NavLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center gap-2 px-2 py-1">
+          {/* Teal dot logo mark */}
+          <div className="size-2 rounded-full bg-teal-500 shrink-0" />
+          <span className="font-semibold text-sm tracking-wide group-data-[collapsible=icon]:hidden">
+            RICE
+          </span>
+        </div>
       </SidebarHeader>
 
+      <SidebarSeparator />
+
       <SidebarContent>
+        {/* ---------------------------------------------------------------- */}
+        {/* Workspace section */}
+        {/* ---------------------------------------------------------------- */}
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {filteredNavItems.map((item) => (
-                <SidebarMenuItem key={item.to}>
+              {workspaceNav.map((item) => (
+                <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
-                    tooltip={item.title}
-                    isActive={location.pathname.startsWith(item.to)}
+                    isActive={location.pathname === item.href}
+                    tooltip={item.label}
                   >
-                    <NavLink to={item.to}>
+                    <Link to={item.href}>
                       <item.icon />
-                      <span>{item.title}</span>
-                    </NavLink>
+                      <span>{item.label}</span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Reports section */}
+        {/* ---------------------------------------------------------------- */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Reports</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {reportsNav
+                // Filter by role: only show items the current user's role can see
+                .filter((item) => item.roles.includes(userRole))
+                .map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location.pathname === item.href}
+                      tooltip={item.label}
+                    >
+                      <Link to={item.href}>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Admin section — only rendered if user has admin role */}
+        {/* ---------------------------------------------------------------- */}
+        {adminNav.some((item) => item.roles.includes(userRole)) && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Admin</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminNav
+                  .filter((item) => item.roles.includes(userRole))
+                  .map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={location.pathname === item.href}
+                        tooltip={item.label}
+                      >
+                        <Link to={item.href}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
+      {/* ------------------------------------------------------------------ */}
+      {/* Footer — user info + sign out */}
+      {/* ------------------------------------------------------------------ */}
+      <SidebarSeparator />
       <SidebarFooter>
         <SidebarMenu>
+          {/* User avatar + name */}
           <SidebarMenuItem>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <SidebarMenuButton size="lg">
-                  <User2 />
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate">{session?.user.name ?? "User"}</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {userRole ?? "developer"}
-                    </span>
-                  </div>
-                  <ChevronUp className="ml-auto" />
-                </SidebarMenuButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="end">
-                <DropdownMenuItem disabled>
-                  <ShieldCheck />
-                  Role: {userRole ?? "developer"}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => signOutMutation.mutate()}
-                  disabled={signOutMutation.isPending}
-                >
-                  <LogOut />
-                  {signOutMutation.isPending ? "Signing out..." : "Sign out"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-2 px-2 py-1 group-data-[collapsible=icon]:justify-center">
+              {/* Initials avatar */}
+              <div className="size-7 rounded-full bg-teal-100 dark:bg-teal-900 flex items-center justify-center text-xs font-semibold text-teal-800 dark:text-teal-200 shrink-0">
+                {userInitials}
+              </div>
+              <div className="flex flex-col group-data-[collapsible=icon]:hidden min-w-0">
+                <span className="text-xs font-medium truncate">
+                  {session?.user?.name ?? "User"}
+                </span>
+                {/* TODO: replace "Developer" with session?.user?.role once RBAC lands */}
+                <span className="text-xs text-muted-foreground capitalize">
+                  {userRole}
+                </span>
+              </div>
+            </div>
+          </SidebarMenuItem>
+
+          {/* Sign out button */}
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={handleSignOut}
+              tooltip="Sign out"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <LogOut />
+              <span>Sign out</span>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }
