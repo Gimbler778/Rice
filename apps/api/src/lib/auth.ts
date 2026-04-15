@@ -55,6 +55,12 @@ export const auth = betterAuth({
       ],
     },
   },
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["atlassian", "bitbucket", "email-password"],
+    },
+  },
   plugins: [
     genericOAuth({
       config: [
@@ -67,7 +73,12 @@ export const auth = betterAuth({
           userInfoUrl: "https://api.bitbucket.org/2.0/user",
           redirectURI: env.BITBUCKET_OAUTH_REDIRECT_URI,
           authentication: "basic",
-          scopes: ["account", "email", "repository", "pullrequest"],
+          scopes: [
+            "account",
+            "email",
+            "repository",
+            "pullrequest",
+          ],
           disableSignUp: true,
           getUserInfo: async (tokens) => {
             const profileResponse = await fetch(
