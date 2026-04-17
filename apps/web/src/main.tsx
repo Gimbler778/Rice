@@ -14,8 +14,11 @@ import { PageContainer } from "./components/page-container";
 import { Button } from "@/components/ui/button";
 import { ErrorFallback } from "@/components/error-fallback";
 import { RouteProtector } from "@/components/route-protector";
-import { DashboardPage } from "@/components/dashboard-page";
+// import { DashboardPage } from "@/components/dashboard-page";
 import { LoginPage } from "@/page/login";
+
+import {TodayPage} from "@/page/today";
+import {WeekPage} from "@/page/week";
 
 // eslint-disable-next-line react-refresh/only-export-components
 const NotFoundPage = () => {
@@ -75,7 +78,8 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/" element={<RootLayout />}>
                   <Route index element={<LoginPage />} />
                   <Route element={<RouteProtector />}>
-                    <Route path="today" element={<DashboardPage />} />
+                    <Route path="today" element={<TodayPage />} />
+                    <Route path="week" element={<WeekPage />} />
                     <Route
                       path="dashboard"
                       element={<Navigate to="/today" replace />}
