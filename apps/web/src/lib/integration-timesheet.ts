@@ -32,6 +32,14 @@ function toOneDecimal(value: number) {
   return Math.round(value * 10) / 10;
 }
 
+function toHoursWithDefault(timeSeconds: number, defaultHours = 1) {
+  if (timeSeconds <= 0) {
+    return defaultHours;
+  }
+
+  return toOneDecimal(timeSeconds / 3600);
+}
+
 function normalizeCategoryValue(category: string) {
   return category.trim().toLowerCase().replace(/[\s-]+/g, "_");
 }
@@ -112,7 +120,7 @@ export function mapIntegrationEntryToTimesheetEntry(
     category: mapIntegrationCategory(entry.category),
     description: entry.description,
     jiraIssueKey,
-    hours: toOneDecimal(Math.max(entry.timeSeconds, 0) / 3600),
+    hours: toHoursWithDefault(entry.timeSeconds),
     status: "in-progress",
   };
 }
@@ -134,7 +142,7 @@ export function mapIntegrationEntryToSuggestion(
       ? entry.relatedData?.projectKey ?? "Jira activity"
       : entry.relatedData?.repositoryFullName ?? "Bitbucket activity";
 
-  const estimatedHours = toOneDecimal(Math.max(entry.timeSeconds, 0) / 3600);
+  const estimatedHours = toHoursWithDefault(entry.timeSeconds);
 
   return {
     id: entry.id,
@@ -142,7 +150,7 @@ export function mapIntegrationEntryToSuggestion(
     title: entry.description,
     subtitle: `${context} · ${toRelativeTime(entry.occurredAt)}`,
     status,
-    estimatedHours: estimatedHours > 0 ? estimatedHours : undefined,
+    estimatedHours,
     suggestedCategory: mapIntegrationCategory(entry.category),
     jiraIssueKey,
   };

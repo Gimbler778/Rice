@@ -61,6 +61,49 @@ import {
   mapIntegrationEntryToTimesheetEntry,
 } from "@/lib/integration-timesheet";
 
+function normalizeComparisonText(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeJiraKey(value?: string) {
+  return value?.trim().toUpperCase() ?? "";
+}
+
+function findDuplicateEntryForSuggestion(
+  entries: TimesheetEntry[],
+  suggestion: Suggestion,
+) {
+  const normalizedSuggestionTitle = normalizeComparisonText(suggestion.title);
+  const normalizedSuggestionJiraKey = normalizeJiraKey(suggestion.jiraIssueKey);
+
+  return entries.find((entry) => {
+    if (entry.id === suggestion.id) {
+      return true;
+    }
+
+    const normalizedEntryJiraKey = normalizeJiraKey(entry.jiraIssueKey);
+    const normalizedEntryDescription = normalizeComparisonText(entry.description);
+
+    if (
+      normalizedSuggestionJiraKey &&
+      normalizedEntryJiraKey &&
+      normalizedEntryJiraKey === normalizedSuggestionJiraKey &&
+      normalizedEntryDescription === normalizedSuggestionTitle
+    ) {
+      return true;
+    }
+
+    if (!normalizedSuggestionJiraKey) {
+      return (
+        normalizedEntryDescription === normalizedSuggestionTitle &&
+        entry.category === suggestion.suggestedCategory
+      );
+    }
+
+    return false;
+  });
+}
+
 // =============================================================================
 // Metric card — top row summary numbers
 // =============================================================================
@@ -216,7 +259,10 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
   }
 
   return (
-    <tr className="border-b hover:bg-muted/30 transition-colors group">
+    <tr
+      className="border-b hover:bg-muted/30 transition-colors"
+      onDoubleClick={() => setIsEditing(true)}
+    >
       {/* Category */}
       <td className="px-3 py-2.5">
         <CategoryBadge category={entry.category} />
@@ -246,7 +292,7 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
       </td>
       {/* Actions */}
       <td className="px-3 py-2.5">
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1">
           <Button
             size="icon"
             variant="ghost"
@@ -494,6 +540,7 @@ function EntryTable({ entries, onDelete, onUpdate, onAdd }: EntryTableProps) {
 interface SuggestionsPanelProps {
   suggestions: Suggestion[];
   crossChecks: CrossCheckPrompt[];
+  alreadyInTimesheetSuggestionIds: Set<string>;
   onAccept: (suggestion: Suggestion) => void;
   onDismissSuggestion: (id: string) => void;
   onDismissCrossCheck: (id: string) => void;
@@ -502,6 +549,7 @@ interface SuggestionsPanelProps {
 function SuggestionsPanel({
   suggestions,
   crossChecks,
+  alreadyInTimesheetSuggestionIds,
   onAccept,
   onDismissSuggestion,
   onDismissCrossCheck,
@@ -563,6 +611,7 @@ function SuggestionsPanel({
             <SuggestionCard
               key={sug.id}
               suggestion={sug}
+              showAlreadyInTimesheet={alreadyInTimesheetSuggestionIds.has(sug.id)}
               onAccept={onAccept}
               onDismiss={onDismissSuggestion}
             />
@@ -581,6 +630,7 @@ function SuggestionsPanel({
             <SuggestionCard
               key={sug.id}
               suggestion={sug}
+              showAlreadyInTimesheet={alreadyInTimesheetSuggestionIds.has(sug.id)}
               onAccept={onAccept}
               onDismiss={onDismissSuggestion}
             />
@@ -601,10 +651,12 @@ function SuggestionsPanel({
 // Individual suggestion card
 function SuggestionCard({
   suggestion,
+  showAlreadyInTimesheet,
   onAccept,
   onDismiss,
 }: {
   suggestion: Suggestion;
+  showAlreadyInTimesheet: boolean;
   onAccept: (s: Suggestion) => void;
   onDismiss: (id: string) => void;
 }) {
@@ -614,11 +666,18 @@ function SuggestionCard({
         <p className="text-xs font-medium text-foreground leading-snug line-clamp-2">
           {suggestion.title}
         </p>
-        {suggestion.status && (
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-            {suggestion.status}
-          </Badge>
-        )}
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          {showAlreadyInTimesheet && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+              Already in timesheet
+            </Badge>
+          )}
+          {suggestion.status && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              {suggestion.status}
+            </Badge>
+          )}
+        </div>
       </div>
       <p className="text-[11px] text-muted-foreground mb-2">{suggestion.subtitle}</p>
       <div className="flex gap-1.5">
@@ -807,6 +866,25 @@ export function TodayPage() {
     [fetchedSuggestionsForDate, hiddenSuggestionIds],
   );
 
+  const alreadyInTimesheetSuggestionIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    for (const suggestion of suggestions) {
+      const duplicateEntry = findDuplicateEntryForSuggestion(entries, suggestion);
+
+      if (!duplicateEntry) {
+        continue;
+      }
+
+      // Avoid noisy labels when both lists come directly from the same integration entry id.
+      if (duplicateEntry.id !== suggestion.id) {
+        ids.add(suggestion.id);
+      }
+    }
+
+    return ids;
+  }, [suggestions, entries]);
+
   const crossChecks = useMemo<CrossCheckPrompt[]>(() => {
     const prompts: CrossCheckPrompt[] = [];
 
@@ -894,12 +972,24 @@ export function TodayPage() {
 
   /** Accept a suggestion — adds it as a new entry. TODO: POST /api/suggestions/accept */
   const handleAcceptSuggestion = (sug: Suggestion) => {
-    handleAdd({
-      category: sug.suggestedCategory,
-      description: sug.title,
-      jiraIssueKey: sug.jiraIssueKey,
-      hours: sug.estimatedHours ?? 1,
-    });
+    const duplicateEntry = findDuplicateEntryForSuggestion(entries, sug);
+
+    if (duplicateEntry) {
+      handleUpdate(duplicateEntry.id, {
+        category: sug.suggestedCategory,
+        description: sug.title,
+        jiraIssueKey: sug.jiraIssueKey,
+        hours: sug.estimatedHours ?? duplicateEntry.hours,
+      });
+    } else {
+      handleAdd({
+        category: sug.suggestedCategory,
+        description: sug.title,
+        jiraIssueKey: sug.jiraIssueKey,
+        hours: sug.estimatedHours ?? 1,
+      });
+    }
+
     setHiddenSuggestionIds((prev) =>
       prev.includes(sug.id) ? prev : [...prev, sug.id],
     );
@@ -1040,6 +1130,7 @@ export function TodayPage() {
             <SuggestionsPanel
               suggestions={suggestions}
               crossChecks={crossChecks}
+              alreadyInTimesheetSuggestionIds={alreadyInTimesheetSuggestionIds}
               onAccept={handleAcceptSuggestion}
               onDismissSuggestion={handleDismissSuggestion}
               onDismissCrossCheck={handleDismissCrossCheck}
