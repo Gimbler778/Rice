@@ -1,11 +1,3 @@
-// =============================================================================
-// RICE — App Sidebar
-// =============================================================================
-// Uses the existing shadcn sidebar primitives from src/components/ui/sidebar.tsx
-// Navigation links are role-aware: managers/admins see Team view under Reports.
-// Replace `userRole` mock with actual session role once RBAC is wired up.
-// =============================================================================
-
 import { Link, useLocation } from "react-router-dom";
 import {
   CalendarDays,
@@ -31,15 +23,11 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { useNavigate } from "react-router-dom";
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 type UserRole = "developer" | "manager" | "admin" | "auditor";
 
-// ---------------------------------------------------------------------------
 // Nav config
-// ---------------------------------------------------------------------------
 
 const workspaceNav = [
   {
@@ -84,9 +72,7 @@ const adminNav = [
   },
 ];
 
-// ---------------------------------------------------------------------------
 // Component
-// ---------------------------------------------------------------------------
 
 export function AppSidebar() {
   const location = useLocation();
@@ -113,9 +99,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      {/* ------------------------------------------------------------------ */}
       {/* Logo */}
-      {/* ------------------------------------------------------------------ */}
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1">
           {/* Teal dot logo mark */}
@@ -129,9 +113,9 @@ export function AppSidebar() {
       <SidebarSeparator />
 
       <SidebarContent>
-        {/* ---------------------------------------------------------------- */}
+        
         {/* Workspace section */}
-        {/* ---------------------------------------------------------------- */}
+        
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -154,9 +138,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* ---------------------------------------------------------------- */}
         {/* Reports section */}
-        {/* ---------------------------------------------------------------- */}
         <SidebarGroup>
           <SidebarGroupLabel>Reports</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -182,9 +164,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* ---------------------------------------------------------------- */}
         {/* Admin section — only rendered if user has admin role */}
-        {/* ---------------------------------------------------------------- */}
         {adminNav.some((item) => item.roles.includes(userRole)) && (
           <SidebarGroup>
             <SidebarGroupLabel>Admin</SidebarGroupLabel>
@@ -212,9 +192,7 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      {/* ------------------------------------------------------------------ */}
       {/* Footer — user info + sign out */}
-      {/* ------------------------------------------------------------------ */}
       <SidebarSeparator />
       <SidebarFooter>
         <SidebarMenu>

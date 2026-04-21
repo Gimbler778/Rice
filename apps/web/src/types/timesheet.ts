@@ -1,15 +1,4 @@
-// =============================================================================
-// RICE — Timesheet Types & Mock Data
-// =============================================================================
-// All types here mirror what the API will eventually return.
-// Mock data is clearly separated so you can swap it out by replacing the
-// mock* exports with actual useQuery hooks when the API is ready.
-// =============================================================================
-
-// ---------------------------------------------------------------------------
 // Enums
-// ---------------------------------------------------------------------------
-
 /** All valid work categories. "manual_other" is for free-text custom entries. */
 export type EntryCategory =
   | "development"
@@ -30,9 +19,7 @@ export type TimesheetStatus = "draft" | "submitted" | "approved";
 /** Status of an individual log entry (used in logs history page). */
 export type EntryStatus = "accepted" | "in-progress" | "on-hold";
 
-// ---------------------------------------------------------------------------
 // Core entity types
-// ---------------------------------------------------------------------------
 
 /** A single timesheet entry (one row in the entry table). */
 export interface TimesheetEntry {
@@ -83,9 +70,7 @@ export interface CrossCheckPrompt {
   suggestedCategory: EntryCategory;
 }
 
-// ---------------------------------------------------------------------------
 // Category display helpers
-// ---------------------------------------------------------------------------
 
 export const CATEGORY_LABELS: Record<EntryCategory, string> = {
   development: "Development",
@@ -98,7 +83,7 @@ export const CATEGORY_LABELS: Record<EntryCategory, string> = {
   events: "Events",
   support: "Support",
   learning: "Learning",
-  manual_other: "Manual (other)",
+  manual_other: "Other",
 };
 
 /** Tailwind classes for each category badge. */
@@ -116,9 +101,6 @@ export const CATEGORY_BADGE_CLASSES: Record<EntryCategory, string> = {
   manual_other: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
 };
 
-// ---------------------------------------------------------------------------
-// Mock data — replace these with real API calls via useQuery
-// ---------------------------------------------------------------------------
 
 /** Today's date as ISO string (used to seed mock data). */
 const TODAY = new Date().toISOString().split("T")[0];
@@ -237,9 +219,7 @@ export const mockCrossChecks: CrossCheckPrompt[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
 // Week mock data
-// ---------------------------------------------------------------------------
 
 /** Generates mock week days for the My Week view. */
 export function getMockWeekDays(): TimesheetDay[] {

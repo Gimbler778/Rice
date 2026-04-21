@@ -1,14 +1,7 @@
-// =============================================================================
-// RICE — My Week Page (/week)
-// =============================================================================
-// Shows a 5-day calendar grid with daily totals, a weekly category summary,
-// an incomplete-day warning banner, and the Submit Week CTA.
-//
 // API endpoints this page will consume:
-//   GET  /api/timesheets/:date          → fetch entries for a specific day
+//   GET  /api/timesheets/date/:date     → fetch entries for a specific day
 //   PATCH /api/timesheets/submit-week   → lock + submit the ISO week
 //   GET  /api/reports/individual?week=:isoWeek → weekly category breakdown
-// =============================================================================
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -45,9 +38,7 @@ import {
   mapIntegrationEntryToTimesheetEntry,
 } from "@/lib/integration-timesheet";
 
-// =============================================================================
 // Category colour map for the summary bar fills
-// =============================================================================
 
 const CATEGORY_BAR_COLORS: Partial<Record<EntryCategory, string>> = {
   development: "bg-teal-500",
@@ -60,9 +51,7 @@ const CATEGORY_BAR_COLORS: Partial<Record<EntryCategory, string>> = {
   learning: "bg-green-500",
 };
 
-// =============================================================================
 // Day card — one column in the 5-day grid
-// =============================================================================
 
 interface DayCardProps {
   day: TimesheetDay;
@@ -152,9 +141,7 @@ function DayCard({ day, onClick }: DayCardProps) {
   );
 }
 
-// =============================================================================
 // Weekly summary bars
-// =============================================================================
 
 interface WeeklySummaryProps {
   summary: Array<{ category: EntryCategory; hours: number }>;
@@ -211,9 +198,7 @@ function WeeklySummary({ summary, isLoading }: WeeklySummaryProps) {
   );
 }
 
-// =============================================================================
 // Submit week dialog
-// =============================================================================
 
 interface SubmitDialogProps {
   open: boolean;
@@ -276,9 +261,7 @@ function SubmitDialog({
   );
 }
 
-// =============================================================================
 // Week Page — main export
-// =============================================================================
 
 export function WeekPage() {
   // -------------------------------------------------------------------------
@@ -297,10 +280,7 @@ export function WeekPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  // -------------------------------------------------------------------------
   // Derived values
-  // -------------------------------------------------------------------------
-
   // Week label: "Mar 23 – Mar 29, 2026"
   const weekStart = startOfWeek(addDays(new Date(), weekOffset * 7), { weekStartsOn: 1 });
   const weekEnd = addDays(weekStart, 4); // Mon–Fri
@@ -340,9 +320,7 @@ export function WeekPage() {
     return d.totalHours === 0 && !isFuture(date) && !isToday(date);
   });
 
-  // -------------------------------------------------------------------------
   // Handlers
-  // -------------------------------------------------------------------------
 
   /** Navigate to today page for a specific date */
   const handleDayClick = (day: TimesheetDay) => {
@@ -353,7 +331,6 @@ export function WeekPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // TODO: await mutation.mutateAsync({ week: format(weekStart, "yyyy-'W'ww") })
       await new Promise((resolve) => setTimeout(resolve, 1000)); // mock delay
       setIsSubmitted(true);
       setSubmitDialogOpen(false);
@@ -362,15 +339,11 @@ export function WeekPage() {
     }
   };
 
-  // -------------------------------------------------------------------------
   // Render
-  // -------------------------------------------------------------------------
 
   return (
     <div className="flex flex-col h-full">
-      {/* ------------------------------------------------------------------ */}
       {/* Page header */}
-      {/* ------------------------------------------------------------------ */}
       <div className="border-b px-6 py-4 flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           {/* Week navigation */}
@@ -430,9 +403,7 @@ export function WeekPage() {
         </div>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
       {/* Main content */}
-      {/* ------------------------------------------------------------------ */}
       <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4">
 
         {integrationTimesheetQuery.isPending && (
@@ -522,9 +493,7 @@ export function WeekPage() {
         )}
       </div>
 
-      {/* ------------------------------------------------------------------ */}
       {/* Submit dialog */}
-      {/* ------------------------------------------------------------------ */}
       <SubmitDialog
         open={submitDialogOpen}
         onClose={() => setSubmitDialogOpen(false)}

@@ -1,10 +1,5 @@
-// =============================================================================
-// RICE — Today's Timesheet Page (/today)
-// =============================================================================
-// Broken into focused sub-components, all in this file for now.
-//
 // API endpoints this page will consume:
-//   GET  /api/timesheets/:date         → fetch entries for a date
+//   GET  /api/timesheets/date/:date    → fetch entries for a date
 //   POST /api/timesheets/entries       → create new entry
 //   PATCH /api/timesheets/entries/:id  → update entry (autosave)
 //   DELETE /api/timesheets/entries/:id → delete entry
@@ -13,10 +8,10 @@
 //   POST /api/suggestions/dismiss      → dismiss a suggestion
 //   PUT  /api/learning/:date           → upsert learning of the day
 //   POST /api/timesheets/copy-yesterday → copy yesterday's entries
-// =============================================================================
 
 import { useEffect, useMemo, useState } from "react";
 import { addDays, format, startOfWeek } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
   Plus,
@@ -53,12 +48,21 @@ import {
   CATEGORY_LABELS,
   CATEGORY_BADGE_CLASSES,
 } from "@/types/timesheet";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
+import { tryCatch } from "@/lib/try-catch";
+import {
+  copyYesterdayTimesheetEntries,
+  createTimesheetEntry,
+  deleteTimesheetEntry,
+  fetchTimesheetByDate,
+  fetchTimesheetEntries,
+  updateTimesheetEntry,
+} from "@/api/timesheets-api";
 import { useIntegrationTimesheet } from "@/hooks/use-integrations";
 import {
   getLocalIsoDateFromTimestamp,
   mapIntegrationEntryToSuggestion,
-  mapIntegrationEntryToTimesheetEntry,
 } from "@/lib/integration-timesheet";
 
 function normalizeComparisonText(value: string) {
@@ -104,9 +108,7 @@ function findDuplicateEntryForSuggestion(
   });
 }
 
-// =============================================================================
 // Metric card — top row summary numbers
-// =============================================================================
 
 interface MetricCardProps {
   label: string;
@@ -125,9 +127,7 @@ function MetricCard({ label, value, sub, valueClassName }: MetricCardProps) {
   );
 }
 
-// =============================================================================
 // Category badge
-// =============================================================================
 
 function CategoryBadge({ category }: { category: EntryCategory }) {
   return (
@@ -142,9 +142,7 @@ function CategoryBadge({ category }: { category: EntryCategory }) {
   );
 }
 
-// =============================================================================
 // Entry row — single row in the entry table
-// =============================================================================
 
 interface EntryRowProps {
   entry: TimesheetEntry;
@@ -163,7 +161,7 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
   });
 
   const handleSave = () => {
-    // TODO: call PATCH /api/timesheets/entries/:id with editValues
+    // Persisting is handled by the parent onUpdate callback.
     onUpdate(entry.id, {
       description: editValues.description,
       hours: editValues.hours,
@@ -274,8 +272,6 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
       {/* JIRA link */}
       <td className="px-3 py-2.5">
         {entry.jiraIssueKey ? (
-          // TODO: replace href with actual Atlassian URL once available
-          // e.g. `https://your-org.atlassian.net/browse/${entry.jiraIssueKey}`
           <a
             href="#"
             className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-mono"
@@ -315,9 +311,7 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
   );
 }
 
-// =============================================================================
 // Add entry row — inline form for new entries
-// =============================================================================
 
 interface AddEntryRowProps {
   onAdd: (entry: Omit<TimesheetEntry, "id" | "date" | "status">) => void;
@@ -334,7 +328,7 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
 
   const handleAdd = () => {
     if (!values.description.trim()) return;
-    // TODO: POST /api/timesheets/entries with values + current date
+    // Persisting is handled by the parent onAdd callback.
     onAdd({
       category: values.category,
       description: values.description,
@@ -409,9 +403,7 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
   );
 }
 
-// =============================================================================
 // Entry table — the main timesheet table
-// =============================================================================
 
 interface EntryTableProps {
   entries: TimesheetEntry[];
@@ -533,9 +525,7 @@ function EntryTable({ entries, onDelete, onUpdate, onAdd }: EntryTableProps) {
   );
 }
 
-// =============================================================================
 // Suggestions panel — right column
-// =============================================================================
 
 interface SuggestionsPanelProps {
   suggestions: Suggestion[];
@@ -700,9 +690,7 @@ function SuggestionCard({
   );
 }
 
-// =============================================================================
 // Learning of the day widget
-// =============================================================================
 
 interface LearningWidgetProps {
   learning: LearningEntry;
@@ -773,17 +761,14 @@ function LearningWidget({ learning, onChange, streak }: LearningWidgetProps) {
   );
 }
 
-// =============================================================================
 // Today Page — main export
-// =============================================================================
 
 export function TodayPage() {
-  // -------------------------------------------------------------------------
   // State
-  // -------------------------------------------------------------------------
 
   const { data: session } = authClient.useSession();
-  const integrationTimesheetQuery = useIntegrationTimesheet(Boolean(session?.user?.id));
+  const isAuthenticated = Boolean(session?.user?.id);
+  const integrationTimesheetQuery = useIntegrationTimesheet(isAuthenticated);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const requestedDate = searchParams.get("date");
@@ -797,18 +782,28 @@ export function TodayPage() {
   }, [requestedDate]);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
+  const selectedWeekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+  const selectedWeekStartStr = format(selectedWeekStart, "yyyy-MM-dd");
+  const selectedWeekEndStr = format(addDays(selectedWeekStart, 4), "yyyy-MM-dd");
+
+  const timesheetDateQuery = useQuery({
+    queryKey: ["timesheet-date", dateStr],
+    queryFn: () => fetchTimesheetByDate(dateStr),
+    enabled: isAuthenticated,
+  });
+
+  const weekEntriesQuery = useQuery({
+    queryKey: ["timesheet-week", selectedWeekStartStr, selectedWeekEndStr],
+    queryFn: () =>
+      fetchTimesheetEntries({
+        from: selectedWeekStartStr,
+        to: selectedWeekEndStr,
+      }),
+    enabled: isAuthenticated,
+  });
 
   const integrationEntries = integrationTimesheetQuery.data?.entries ?? [];
-
-  const mappedIntegrationEntries = useMemo(
-    () => integrationEntries.map(mapIntegrationEntryToTimesheetEntry),
-    [integrationEntries],
-  );
-
-  const fetchedEntriesForDate = useMemo(
-    () => mappedIntegrationEntries.filter((entry) => entry.date === dateStr),
-    [mappedIntegrationEntries, dateStr],
-  );
+  const fetchedEntriesForDate = timesheetDateQuery.data?.entries ?? [];
 
   const fetchedSuggestionsForDate = useMemo(
     () =>
@@ -854,16 +849,16 @@ export function TodayPage() {
     });
   }, [dateStr]);
 
-  // -------------------------------------------------------------------------
   // Derived values
-  // -------------------------------------------------------------------------
 
   const suggestions = useMemo(
     () =>
       fetchedSuggestionsForDate.filter(
-        (suggestion) => !hiddenSuggestionIds.includes(suggestion.id),
+        (suggestion) =>
+          !hiddenSuggestionIds.includes(suggestion.id)
+          && !findDuplicateEntryForSuggestion(entries, suggestion),
       ),
-    [fetchedSuggestionsForDate, hiddenSuggestionIds],
+    [fetchedSuggestionsForDate, hiddenSuggestionIds, entries],
   );
 
   const alreadyInTimesheetSuggestionIds = useMemo(() => {
@@ -916,58 +911,115 @@ export function TodayPage() {
   }, [suggestions, entries, dismissedCrossCheckIds]);
 
   const totalHours = entries.reduce((sum, e) => sum + e.hours, 0);
-  const selectedWeekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-  const selectedWeekStartStr = format(selectedWeekStart, "yyyy-MM-dd");
-  const selectedWeekEndStr = format(addDays(selectedWeekStart, 4), "yyyy-MM-dd");
-
-  const weekEntries = useMemo(
-    () =>
-      mappedIntegrationEntries.filter(
-        (entry) => entry.date >= selectedWeekStartStr && entry.date <= selectedWeekEndStr,
-      ),
-    [mappedIntegrationEntries, selectedWeekStartStr, selectedWeekEndStr],
-  );
+  const weekEntries = weekEntriesQuery.data?.entries ?? [];
 
   const weekTotalHours = weekEntries.reduce((sum, entry) => sum + entry.hours, 0);
   const weekLoggedDays = new Set(weekEntries.map((entry) => entry.date)).size;
 
-  // -------------------------------------------------------------------------
   // Handlers
-  // -------------------------------------------------------------------------
 
   const handleNavigateDay = (dayOffset: number) => {
     const nextDate = addDays(selectedDate, dayOffset);
     setSearchParams({ date: format(nextDate, "yyyy-MM-dd") });
   };
 
-  /** Delete an entry locally. TODO: call DELETE /api/timesheets/entries/:id */
-  const handleDelete = (id: string) => {
-    setEntries((prev) => prev.filter((e) => e.id !== id));
-    setSaveState("saving");
-    setTimeout(() => setSaveState("saved"), 800);
+  const refetchTimesheetQueries = async () => {
+    await Promise.all([timesheetDateQuery.refetch(), weekEntriesQuery.refetch()]);
   };
 
-  /** Update an entry locally. TODO: debounce + PATCH /api/timesheets/entries/:id */
-  const handleUpdate = (id: string, updates: Partial<TimesheetEntry>) => {
+  const handleDelete = async (id: string) => {
+    const previousEntries = entries;
+    setEntries((prev) => prev.filter((entry) => entry.id !== id));
+    setSaveState("saving");
+
+    const { error } = await tryCatch(deleteTimesheetEntry(id));
+
+    if (error) {
+      setEntries(previousEntries);
+      setSaveState("saved");
+      toast.error("Could not delete entry.");
+      return;
+    }
+
+    await refetchTimesheetQueries();
+    setSaveState("saved");
+  };
+
+  const handleUpdate = async (id: string, updates: Partial<TimesheetEntry>) => {
+    const previousEntries = entries;
     setEntries((prev) =>
       prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
     );
-    // Simulate autosave indicator
+
     setSaveState("saving");
-    setTimeout(() => setSaveState("saved"), 800);
+
+    const { error } = await tryCatch(
+      updateTimesheetEntry(id, {
+        category: updates.category,
+        description: updates.description,
+        hours: updates.hours,
+        jiraIssueKey:
+          updates.jiraIssueKey === undefined ? undefined : (updates.jiraIssueKey ?? null),
+        status: updates.status,
+      }),
+    );
+
+    if (error) {
+      setEntries(previousEntries);
+      setSaveState("saved");
+      toast.error("Could not update entry.");
+      return;
+    }
+
+    await refetchTimesheetQueries();
+    setSaveState("saved");
   };
 
-  /** Add a new entry. TODO: POST /api/timesheets/entries */
-  const handleAdd = (entry: Omit<TimesheetEntry, "id" | "date" | "status">) => {
-    const newEntry: TimesheetEntry = {
-      ...entry,
-      id: `entry-${Date.now()}`,
-      date: dateStr,
-      status: "in-progress",
-    };
-    setEntries((prev) => [...prev, newEntry]);
+  const handleAdd = async (entry: Omit<TimesheetEntry, "id" | "date" | "status">) => {
     setSaveState("saving");
-    setTimeout(() => setSaveState("saved"), 800);
+
+    const { data: createdEntry, error } = await tryCatch(
+      createTimesheetEntry({
+        date: dateStr,
+        category: entry.category,
+        description: entry.description,
+        jiraIssueKey: entry.jiraIssueKey,
+        hours: entry.hours,
+        status: "in-progress",
+      }),
+    );
+
+    if (error) {
+      setSaveState("saved");
+      toast.error("Could not add entry.");
+      return;
+    }
+
+    setEntries((prev) => [...prev, createdEntry]);
+    await refetchTimesheetQueries();
+    setSaveState("saved");
+  };
+
+  const handleCopyYesterday = async () => {
+    setSaveState("saving");
+
+    const { data, error } = await tryCatch(copyYesterdayTimesheetEntries(dateStr));
+
+    if (error) {
+      setSaveState("saved");
+      toast.error("Could not copy yesterday's entries.");
+      return;
+    }
+
+    await refetchTimesheetQueries();
+    setSaveState("saved");
+
+    if (data.copiedCount > 0) {
+      toast.success(`${data.copiedCount} entries copied from yesterday.`);
+      return;
+    }
+
+    toast.info("No new entries were copied from yesterday.");
   };
 
   /** Accept a suggestion — adds it as a new entry. TODO: POST /api/suggestions/accept */
@@ -975,14 +1027,14 @@ export function TodayPage() {
     const duplicateEntry = findDuplicateEntryForSuggestion(entries, sug);
 
     if (duplicateEntry) {
-      handleUpdate(duplicateEntry.id, {
+      void handleUpdate(duplicateEntry.id, {
         category: sug.suggestedCategory,
         description: sug.title,
         jiraIssueKey: sug.jiraIssueKey,
         hours: sug.estimatedHours ?? duplicateEntry.hours,
       });
     } else {
-      handleAdd({
+      void handleAdd({
         category: sug.suggestedCategory,
         description: sug.title,
         jiraIssueKey: sug.jiraIssueKey,
@@ -1005,15 +1057,11 @@ export function TodayPage() {
     setDismissedCrossCheckIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   };
 
-  // -------------------------------------------------------------------------
   // Render
-  // -------------------------------------------------------------------------
 
   return (
     <div className="flex flex-col h-full">
-      {/* ------------------------------------------------------------------ */}
       {/* Page header */}
-      {/* ------------------------------------------------------------------ */}
       <div className="border-b px-6 py-4 flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           {/* Date navigation */}
@@ -1056,8 +1104,13 @@ export function TodayPage() {
             />
             {saveState === "saving" ? "Saving…" : "Draft saved"}
           </div>
-          {/* TODO: POST /api/timesheets/copy-yesterday */}
-          <Button variant="outline" size="sm" className="h-7 text-xs">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={handleCopyYesterday}
+            disabled={saveState === "saving"}
+          >
             Copy yesterday
           </Button>
           {/* TODO: PATCH /api/timesheets/submit-week */}
@@ -1067,9 +1120,7 @@ export function TodayPage() {
         </div>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
       {/* Main content */}
-      {/* ------------------------------------------------------------------ */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-6 py-4 flex gap-5">
           {/* Left column — metrics + table + learning */}
@@ -1077,6 +1128,12 @@ export function TodayPage() {
             {integrationTimesheetQuery.isPending && (
               <div className="rounded-md border border-border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
                 Fetching synced Jira and Bitbucket entries...
+              </div>
+            )}
+
+            {timesheetDateQuery.isPending && (
+              <div className="rounded-md border border-border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
+                Loading saved timesheet entries...
               </div>
             )}
 

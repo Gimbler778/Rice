@@ -16,6 +16,7 @@ import { ErrorFallback } from "@/components/error-fallback";
 import { RouteProtector } from "@/components/route-protector";
 // import { DashboardPage } from "@/components/dashboard-page";
 import { LoginPage } from "@/page/login";
+import { LogsPage } from "@/page/logs";
 
 import {TodayPage} from "@/page/today";
 import {WeekPage} from "@/page/week";
@@ -80,6 +81,7 @@ createRoot(document.getElementById("root")!).render(
                   <Route element={<RouteProtector />}>
                     <Route path="today" element={<TodayPage />} />
                     <Route path="week" element={<WeekPage />} />
+                    <Route path="logs" element={<LogsPage />} />
                     <Route
                       path="dashboard"
                       element={<Navigate to="/today" replace />}

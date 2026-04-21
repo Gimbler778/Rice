@@ -7,6 +7,7 @@ import { RESPONSE_CODE, sendSuccess } from "@/lib/response";
 import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import integrationsRouter from "./routes/integrations";
+import timesheetsRouter from "./routes/timesheets";
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json());
+app.use("/api", timesheetsRouter);
 app.use("/api", integrationsRouter);
 
 app.get("/health", (_req, res) => {
