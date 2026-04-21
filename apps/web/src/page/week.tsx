@@ -1,8 +1,7 @@
 // API endpoints this page will consume:
-//   GET  /api/timesheets/:date          → fetch entries for a specific day
+//   GET  /api/timesheets/date/:date     → fetch entries for a specific day
 //   PATCH /api/timesheets/submit-week   → lock + submit the ISO week
 //   GET  /api/reports/individual?week=:isoWeek → weekly category breakdown
-// =============================================================================
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";

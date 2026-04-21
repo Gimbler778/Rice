@@ -19,9 +19,7 @@ export type TimesheetStatus = "draft" | "submitted" | "approved";
 /** Status of an individual log entry (used in logs history page). */
 export type EntryStatus = "accepted" | "in-progress" | "on-hold";
 
-// ---------------------------------------------------------------------------
 // Core entity types
-// ---------------------------------------------------------------------------
 
 /** A single timesheet entry (one row in the entry table). */
 export interface TimesheetEntry {
@@ -72,9 +70,7 @@ export interface CrossCheckPrompt {
   suggestedCategory: EntryCategory;
 }
 
-// ---------------------------------------------------------------------------
 // Category display helpers
-// ---------------------------------------------------------------------------
 
 export const CATEGORY_LABELS: Record<EntryCategory, string> = {
   development: "Development",
@@ -105,9 +101,6 @@ export const CATEGORY_BADGE_CLASSES: Record<EntryCategory, string> = {
   manual_other: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
 };
 
-// ---------------------------------------------------------------------------
-// Mock data — replace these with real API calls via useQuery
-// ---------------------------------------------------------------------------
 
 /** Today's date as ISO string (used to seed mock data). */
 const TODAY = new Date().toISOString().split("T")[0];

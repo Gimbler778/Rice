@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { fetchTimesheetEntries } from "@/api/timesheets-api";
 import { authClient } from "@/lib/auth-client";
-import { useIntegrationTimesheet } from "@/hooks/use-integrations";
-import { mapIntegrationEntryToTimesheetEntry } from "@/lib/integration-timesheet";
 import { CATEGORY_LABELS, type EntryCategory, type EntryStatus } from "@/types/timesheet";
 
 type LogEntry = {
@@ -73,8 +73,8 @@ function categoryBadgeClass(category: EntryCategory): string {
 }
 
 export function LogsPage() {
-  const { data: session } = authClient.useSession();
-  const integrationTimesheetQuery = useIntegrationTimesheet(Boolean(session?.user?.id));
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
+  const isAuthenticated = Boolean(session?.user?.id);
 
   const today = useMemo(() => new Date(), []);
   const defaultTo = formatDateInput(today);
@@ -88,12 +88,24 @@ export function LogsPage() {
   const [page, setPage] = useState(1);
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
 
-  const allEntries = useMemo<LogEntry[]>(
-    () => (integrationTimesheetQuery.data?.entries ?? []).map(mapIntegrationEntryToTimesheetEntry),
-    [integrationTimesheetQuery.data?.entries],
-  );
+  const {
+    data: allEntries = [],
+    isLoading,
+    isError,
+  } = useQuery<LogEntry[]>({
+    queryKey: ["logs-history", fromDate, toDate, category, status],
+    enabled: isAuthenticated,
+    queryFn: async () => {
+      const response = await fetchTimesheetEntries({
+        from: fromDate,
+        to: toDate,
+        category: category === "all" ? undefined : category,
+        status: status === "all" ? undefined : status,
+      });
 
-  const isLoading = integrationTimesheetQuery.isPending;
+      return response.entries;
+    },
+  });
 
   const filteredEntries = useMemo(() => {
     return allEntries
@@ -148,6 +160,11 @@ export function LogsPage() {
           <p className="text-sm text-muted-foreground">
             All past timesheet entries across days.
           </p>
+          {isError && (
+            <p className="text-sm text-destructive">
+              Could not load logs right now. Please refresh and try again.
+            </p>
+          )}
         </CardHeader>
 
         <CardContent className="flex flex-col gap-5">
@@ -246,7 +263,7 @@ export function LogsPage() {
                 </tr>
               </thead>
               <tbody>
-                {isLoading ? (
+                {isSessionPending || isLoading ? (
                   <tr>
                     <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                       Loading entries...
