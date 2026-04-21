@@ -104,9 +104,7 @@ function findDuplicateEntryForSuggestion(
   });
 }
 
-// =============================================================================
 // Metric card — top row summary numbers
-// =============================================================================
 
 interface MetricCardProps {
   label: string;
@@ -125,9 +123,7 @@ function MetricCard({ label, value, sub, valueClassName }: MetricCardProps) {
   );
 }
 
-// =============================================================================
 // Category badge
-// =============================================================================
 
 function CategoryBadge({ category }: { category: EntryCategory }) {
   return (
@@ -142,9 +138,7 @@ function CategoryBadge({ category }: { category: EntryCategory }) {
   );
 }
 
-// =============================================================================
 // Entry row — single row in the entry table
-// =============================================================================
 
 interface EntryRowProps {
   entry: TimesheetEntry;
@@ -274,8 +268,6 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
       {/* JIRA link */}
       <td className="px-3 py-2.5">
         {entry.jiraIssueKey ? (
-          // TODO: replace href with actual Atlassian URL once available
-          // e.g. `https://your-org.atlassian.net/browse/${entry.jiraIssueKey}`
           <a
             href="#"
             className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-mono"
@@ -315,9 +307,7 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
   );
 }
 
-// =============================================================================
 // Add entry row — inline form for new entries
-// =============================================================================
 
 interface AddEntryRowProps {
   onAdd: (entry: Omit<TimesheetEntry, "id" | "date" | "status">) => void;
@@ -409,9 +399,7 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
   );
 }
 
-// =============================================================================
 // Entry table — the main timesheet table
-// =============================================================================
 
 interface EntryTableProps {
   entries: TimesheetEntry[];
@@ -533,9 +521,7 @@ function EntryTable({ entries, onDelete, onUpdate, onAdd }: EntryTableProps) {
   );
 }
 
-// =============================================================================
 // Suggestions panel — right column
-// =============================================================================
 
 interface SuggestionsPanelProps {
   suggestions: Suggestion[];
@@ -700,9 +686,7 @@ function SuggestionCard({
   );
 }
 
-// =============================================================================
 // Learning of the day widget
-// =============================================================================
 
 interface LearningWidgetProps {
   learning: LearningEntry;
@@ -773,14 +757,10 @@ function LearningWidget({ learning, onChange, streak }: LearningWidgetProps) {
   );
 }
 
-// =============================================================================
 // Today Page — main export
-// =============================================================================
 
 export function TodayPage() {
-  // -------------------------------------------------------------------------
   // State
-  // -------------------------------------------------------------------------
 
   const { data: session } = authClient.useSession();
   const integrationTimesheetQuery = useIntegrationTimesheet(Boolean(session?.user?.id));
@@ -854,9 +834,7 @@ export function TodayPage() {
     });
   }, [dateStr]);
 
-  // -------------------------------------------------------------------------
   // Derived values
-  // -------------------------------------------------------------------------
 
   const suggestions = useMemo(
     () =>
@@ -931,9 +909,7 @@ export function TodayPage() {
   const weekTotalHours = weekEntries.reduce((sum, entry) => sum + entry.hours, 0);
   const weekLoggedDays = new Set(weekEntries.map((entry) => entry.date)).size;
 
-  // -------------------------------------------------------------------------
   // Handlers
-  // -------------------------------------------------------------------------
 
   const handleNavigateDay = (dayOffset: number) => {
     const nextDate = addDays(selectedDate, dayOffset);
@@ -1005,15 +981,11 @@ export function TodayPage() {
     setDismissedCrossCheckIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   };
 
-  // -------------------------------------------------------------------------
   // Render
-  // -------------------------------------------------------------------------
 
   return (
     <div className="flex flex-col h-full">
-      {/* ------------------------------------------------------------------ */}
       {/* Page header */}
-      {/* ------------------------------------------------------------------ */}
       <div className="border-b px-6 py-4 flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           {/* Date navigation */}
@@ -1067,9 +1039,7 @@ export function TodayPage() {
         </div>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
       {/* Main content */}
-      {/* ------------------------------------------------------------------ */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-6 py-4 flex gap-5">
           {/* Left column — metrics + table + learning */}

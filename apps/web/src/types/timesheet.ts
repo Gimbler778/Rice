@@ -1,15 +1,4 @@
-// =============================================================================
-// RICE — Timesheet Types & Mock Data
-// =============================================================================
-// All types here mirror what the API will eventually return.
-// Mock data is clearly separated so you can swap it out by replacing the
-// mock* exports with actual useQuery hooks when the API is ready.
-// =============================================================================
-
-// ---------------------------------------------------------------------------
 // Enums
-// ---------------------------------------------------------------------------
-
 /** All valid work categories. "manual_other" is for free-text custom entries. */
 export type EntryCategory =
   | "development"
@@ -98,7 +87,7 @@ export const CATEGORY_LABELS: Record<EntryCategory, string> = {
   events: "Events",
   support: "Support",
   learning: "Learning",
-  manual_other: "Manual (other)",
+  manual_other: "Other",
 };
 
 /** Tailwind classes for each category badge. */
@@ -237,9 +226,7 @@ export const mockCrossChecks: CrossCheckPrompt[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
 // Week mock data
-// ---------------------------------------------------------------------------
 
 /** Generates mock week days for the My Week view. */
 export function getMockWeekDays(): TimesheetDay[] {
