@@ -78,9 +78,10 @@ const adminNav = [
   },
 ];
 
-const accountTriggerClassName = "h-auto cursor-pointer p-2";
+const accountTriggerClassName =
+  "h-auto cursor-pointer p-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0";
 const accountAvatarClassName =
-  "size-7 shrink-0 rounded-full bg-sidebar-accent text-sidebar-accent-foreground flex items-center justify-center text-xs font-semibold";
+  "size-7 shrink-0 rounded-full bg-sidebar-accent text-sidebar-accent-foreground flex items-center justify-center text-xs font-semibold group-data-[collapsible=icon]:size-6";
 const profileActionClassName =
   "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground hover:bg-accent hover:text-accent-foreground";
 const signOutActionClassName =
