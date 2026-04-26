@@ -22,10 +22,11 @@ import {
 } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
 import { useNavigate } from "react-router-dom";
+import { getSessionUserRole, type AppRole } from "@/lib/roles";
 
 // Types
 
-type UserRole = "developer" | "manager" | "admin" | "auditor";
+type UserRole = AppRole;
 
 // Nav config
 
@@ -79,9 +80,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
 
-  // TODO: Replace with real role from session once RBAC is wired
-  // e.g. const userRole = session?.user.role as UserRole ?? "developer"
-  const userRole: UserRole = "developer";
+  const userRole: UserRole = getSessionUserRole(session) ?? "developer";
 
   const userInitials = session?.user?.name
     ? session.user.name
@@ -207,7 +206,6 @@ export function AppSidebar() {
                 <span className="text-xs font-medium truncate">
                   {session?.user?.name ?? "User"}
                 </span>
-                {/* TODO: replace "Developer" with session?.user?.role once RBAC lands */}
                 <span className="text-xs text-muted-foreground capitalize">
                   {userRole}
                 </span>

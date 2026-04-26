@@ -91,6 +91,19 @@ VITE_SERVER_BASE_URL=http://localhost:3000
 pnpm --filter api db:migrate
 ```
 
+### 4a. Seed Demo Login
+
+```bash
+pnpm seed:demo
+```
+
+Demo credentials:
+
+- `developer@iqm.local` / `Demo1234!`
+- `manager@iqm.local` / `Demo1234!`
+- `admin@iqm.local` / `Demo1234!`
+- `auditor@iqm.local` / `Demo1234!`
+
 ### 5. Generate Better Auth Schema
 
 ```bash

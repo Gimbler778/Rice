@@ -8,7 +8,8 @@
     "lint:web": "pnpm --filter web lint",
     "dev:api": "pnpm --filter api dev",
     "build:api": "pnpm --filter api build",
-    "typecheck:api": "pnpm --filter api typecheck"
+    "typecheck:api": "pnpm --filter api typecheck",
+    "seed:demo": "pnpm --filter api db:seed"
   },
   "packageManager": "pnpm@10.26.2",
   "pnpm": {

@@ -17,6 +17,7 @@ import { RouteProtector } from "@/components/route-protector";
 // import { DashboardPage } from "@/components/dashboard-page";
 import { LoginPage } from "@/page/login";
 import { LogsPage } from "@/page/logs";
+import { ReportsPage, TeamReportsPage } from "@/page/reports";
 
 import {TodayPage} from "@/page/today";
 import {WeekPage} from "@/page/week";
@@ -82,6 +83,14 @@ createRoot(document.getElementById("root")!).render(
                     <Route path="today" element={<TodayPage />} />
                     <Route path="week" element={<WeekPage />} />
                     <Route path="logs" element={<LogsPage />} />
+                    <Route path="reports" element={<ReportsPage />} />
+                    <Route
+                      element={
+                        <RouteProtector allowedRoles={["manager", "admin"]} />
+                      }
+                    >
+                      <Route path="reports/team" element={<TeamReportsPage />} />
+                    </Route>
                     <Route
                       path="dashboard"
                       element={<Navigate to="/today" replace />}
