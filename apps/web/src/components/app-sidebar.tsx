@@ -31,26 +31,25 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { authClient } from "@/lib/auth-client";
+import { getSessionUserRole, type AppRole } from "@/lib/roles";
 // import { ProfileSheet } from "@/components/profile-sheet";
 
 // Types & nav config
 
-type UserRole = "developer" | "manager" | "admin" | "auditor";
-
 const workspaceNav = [
-  { label: "Today",        href: "/today",    icon: CalendarDays,   roles: ["developer","manager","admin"] as UserRole[] },
-  { label: "My week",      href: "/week",     icon: CalendarRange,  roles: ["developer","manager","admin"] as UserRole[] },
-  { label: "Calendar",     href: "/calendar", icon: CalendarCheck2, roles: ["developer","manager","admin"] as UserRole[] },
-  { label: "Logs history", href: "/logs",     icon: History,        roles: ["developer","manager","admin","auditor"] as UserRole[] },
+  { label: "Today",        href: "/today",    icon: CalendarDays,   roles: ["developer","manager","admin"] as AppRole[] },
+  { label: "My week",      href: "/week",     icon: CalendarRange,  roles: ["developer","manager","admin"] as AppRole[] },
+  { label: "Calendar",     href: "/calendar", icon: CalendarCheck2, roles: ["developer","manager","admin"] as AppRole[] },
+  { label: "Logs history", href: "/logs",     icon: History,        roles: ["developer","manager","admin","auditor"] as AppRole[] },
 ];
 
 const reportsNav = [
-  { label: "My reports", href: "/reports",      icon: BarChart3, roles: ["developer","manager","admin","auditor"] as UserRole[] },
-  { label: "Team view",  href: "/reports/team", icon: Users,     roles: ["manager","admin","auditor"] as UserRole[] },
+  { label: "My reports", href: "/reports",      icon: BarChart3, roles: ["developer","manager","admin","auditor"] as AppRole[] },
+  { label: "Team view",  href: "/reports/team", icon: Users,     roles: ["manager","admin","auditor"] as AppRole[] },
 ];
 
 const adminNav = [
-  { label: "Admin panel", href: "/admin", icon: Settings, roles: ["admin"] as UserRole[] },
+  { label: "Admin panel", href: "/admin", icon: Settings, roles: ["admin"] as AppRole[] },
 ];
 
 // =============================================================================
@@ -60,11 +59,9 @@ const adminNav = [
 export function AppSidebar() {
   const location = useLocation();
   const { data: session } = authClient.useSession();
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [, setProfileOpen] = useState(false);
 
-  // TODO: replace with real role from session once Nirav wires up RBAC
-  // const userRole = (session?.user as any)?.role as UserRole ?? "developer"
-  const userRole: UserRole = "admin"; // set to "admin" during dev to see all nav items
+  const userRole: AppRole = getSessionUserRole(session) ?? "developer";
 
   const userInitials = session?.user?.name
     ? session.user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
@@ -73,7 +70,7 @@ export function AppSidebar() {
   const isActive = (href: string) => location.pathname === href;
 
   const renderNavItems = (
-    items: { label: string; href: string; icon: React.ElementType; roles: UserRole[] }[]
+    items: { label: string; href: string; icon: React.ElementType; roles: AppRole[] }[]
   ) =>
     items
       .filter((item) => item.roles.includes(userRole))
