@@ -20,7 +20,7 @@ import { LogsPage } from "@/page/logs";
 
 import {TodayPage} from "@/page/today";
 import {WeekPage} from "@/page/week";
-
+import { AdminPage } from "./page/admin";
 // eslint-disable-next-line react-refresh/only-export-components
 const NotFoundPage = () => {
   return (
@@ -82,6 +82,7 @@ createRoot(document.getElementById("root")!).render(
                     <Route path="today" element={<TodayPage />} />
                     <Route path="week" element={<WeekPage />} />
                     <Route path="logs" element={<LogsPage />} />
+                    <Route path="admin" element={<AdminPage />} />
                     <Route
                       path="dashboard"
                       element={<Navigate to="/today" replace />}
