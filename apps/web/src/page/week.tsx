@@ -1,8 +1,3 @@
-// API endpoints this page will consume:
-//   GET  /api/timesheets/date/:date     → fetch entries for a specific day
-//   PATCH /api/timesheets/submit-week   → lock + submit the ISO week
-//   GET  /api/reports/individual?week=:isoWeek → weekly category breakdown
-
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, startOfWeek, addDays, isToday, isFuture } from "date-fns";
@@ -264,9 +259,7 @@ function SubmitDialog({
 // Week Page — main export
 
 export function WeekPage() {
-  // -------------------------------------------------------------------------
   // State
-  // -------------------------------------------------------------------------
 
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
