@@ -5,6 +5,7 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  User,
   History,
 } from "lucide-react";
 import {
@@ -20,12 +21,14 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { authClient } from "@/lib/auth-client";
+import { type AppRole, getSessionUserRole } from "@/lib/roles";
 import { useNavigate } from "react-router-dom";
-
-// Types
-
-type UserRole = "developer" | "manager" | "admin" | "auditor";
 
 // Nav config
 
@@ -52,14 +55,14 @@ const reportsNav = [
     label: "My reports",
     href: "/reports",
     icon: BarChart3,
-    roles: ["developer", "manager", "admin", "auditor"] as UserRole[],
+    roles: ["developer", "manager", "admin", "auditor"] as AppRole[],
   },
   {
     label: "Team view",
     href: "/reports/team",
     icon: BarChart3,
     // Only managers and admins see team view
-    roles: ["manager", "admin"] as UserRole[],
+    roles: ["manager", "admin"] as AppRole[],
   },
 ];
 
@@ -68,9 +71,57 @@ const adminNav = [
     label: "Admin panel",
     href: "/admin",
     icon: Settings,
-    roles: ["admin"] as UserRole[],
+    roles: ["admin"] as AppRole[],
   },
 ];
+
+const accountTriggerClassName =
+  "h-auto cursor-pointer p-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0";
+const accountAvatarClassName =
+  "size-7 shrink-0 rounded-full bg-sidebar-accent text-sidebar-accent-foreground flex items-center justify-center text-xs font-semibold group-data-[collapsible=icon]:size-6";
+const profileActionClassName =
+  "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground hover:bg-accent hover:text-accent-foreground";
+const signOutActionClassName =
+  "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10 hover:text-destructive";
+
+type SidebarAccountMenuProps = {
+  userInitials: string;
+  userName?: string;
+  userRole: AppRole;
+  onSignOut: () => Promise<void>;
+};
+
+function SidebarAccountMenu({
+  userInitials,
+  userName,
+  userRole,
+  onSignOut,
+}: SidebarAccountMenuProps) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <SidebarMenuButton tooltip="Account" className={accountTriggerClassName}>
+          <div className={accountAvatarClassName}>{userInitials}</div>
+          <div className="flex flex-col min-w-0 text-left group-data-[collapsible=icon]:hidden">
+            <span className="text-xs font-medium truncate">{userName ?? "User"}</span>
+            {/* TODO: replace "Developer" with session?.user?.role once RBAC lands */}
+            <span className="text-xs text-muted-foreground capitalize">{userRole}</span>
+          </div>
+        </SidebarMenuButton>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" className="w-56 p-1.5 flex-col gap-1">
+        <Link to="/profile" className={profileActionClassName}>
+          <User className="size-4 shrink-0" />
+          <span>Profile</span>
+        </Link>
+        <button type="button" onClick={onSignOut} className={signOutActionClassName}>
+          <LogOut className="size-4 shrink-0" />
+          <span>Sign out</span>
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 // Component
 
@@ -79,9 +130,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
 
-  // TODO: Replace with real role from session once RBAC is wired
-  // e.g. const userRole = session?.user.role as UserRole ?? "developer"
-  const userRole: UserRole = "developer";
+  const userRole = getSessionUserRole(session) ?? "developer";
 
   const userInitials = session?.user?.name
     ? session.user.name
@@ -102,8 +151,7 @@ export function AppSidebar() {
       {/* Logo */}
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1">
-          {/* Teal dot logo mark */}
-          <div className="size-2 rounded-full bg-teal-500 shrink-0" />
+          <div className="size-2 rounded-full bg-primary shrink-0" />
           <span className="font-semibold text-sm tracking-wide group-data-[collapsible=icon]:hidden">
             RICE
           </span>
@@ -192,39 +240,17 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      {/* Footer — user info + sign out */}
+      {/* Footer — user info */}
       <SidebarSeparator />
       <SidebarFooter>
         <SidebarMenu>
-          {/* User avatar + name */}
           <SidebarMenuItem>
-            <div className="flex items-center gap-2 px-2 py-1 group-data-[collapsible=icon]:justify-center">
-              {/* Initials avatar */}
-              <div className="size-7 rounded-full bg-teal-100 dark:bg-teal-900 flex items-center justify-center text-xs font-semibold text-teal-800 dark:text-teal-200 shrink-0">
-                {userInitials}
-              </div>
-              <div className="flex flex-col group-data-[collapsible=icon]:hidden min-w-0">
-                <span className="text-xs font-medium truncate">
-                  {session?.user?.name ?? "User"}
-                </span>
-                {/* TODO: replace "Developer" with session?.user?.role once RBAC lands */}
-                <span className="text-xs text-muted-foreground capitalize">
-                  {userRole}
-                </span>
-              </div>
-            </div>
-          </SidebarMenuItem>
-
-          {/* Sign out button */}
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={handleSignOut}
-              tooltip="Sign out"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <LogOut />
-              <span>Sign out</span>
-            </SidebarMenuButton>
+            <SidebarAccountMenu
+              userInitials={userInitials}
+              userName={session?.user?.name}
+              userRole={userRole}
+              onSignOut={handleSignOut}
+            />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
