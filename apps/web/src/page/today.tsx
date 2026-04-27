@@ -768,7 +768,6 @@ export function TodayPage() {
 
   const { data: session } = authClient.useSession();
   const isAuthenticated = Boolean(session?.user?.id);
-  const integrationTimesheetQuery = useIntegrationTimesheet(isAuthenticated);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const requestedDate = searchParams.get("date");
@@ -782,6 +781,7 @@ export function TodayPage() {
   }, [requestedDate]);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
+  const integrationTimesheetQuery = useIntegrationTimesheet(isAuthenticated, dateStr);
   const selectedWeekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
   const selectedWeekStartStr = format(selectedWeekStart, "yyyy-MM-dd");
   const selectedWeekEndStr = format(addDays(selectedWeekStart, 4), "yyyy-MM-dd");

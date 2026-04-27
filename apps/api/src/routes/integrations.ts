@@ -46,6 +46,11 @@ type BitbucketRepository = {
   htmlUrl: string | null;
 };
 
+type DateWindow = {
+  fromMs: number;
+  toMs: number;
+};
+
 type DashboardEntry = {
   id: string;
   category: string;
@@ -227,6 +232,49 @@ function formatDuration(seconds: number) {
   }
 
   return "0m";
+}
+
+function parseDateWindow(
+  from?: unknown,
+  to?: unknown,
+): DateWindow | null {
+  const fromValue = typeof from === "string" ? Date.parse(from) : Number.NaN;
+  const toValue = typeof to === "string" ? Date.parse(to) : Number.NaN;
+
+  if (Number.isNaN(fromValue) || Number.isNaN(toValue) || fromValue >= toValue) {
+    return null;
+  }
+
+  return {
+    fromMs: fromValue,
+    toMs: toValue,
+  };
+}
+
+function isTimestampInWindow(timestamp: string | undefined, window: DateWindow | null) {
+  if (!window || !timestamp) {
+    return true;
+  }
+
+  const { fromMs, toMs } = window;
+  const timestampMs = Date.parse(timestamp);
+
+  if (Number.isNaN(timestampMs)) {
+    return false;
+  }
+
+  return timestampMs >= fromMs && timestampMs < toMs;
+}
+
+function isOlderThanWindow(timestamp: string | undefined, window: DateWindow | null) {
+  if (!window || !timestamp) {
+    return false;
+  }
+
+  const { fromMs } = window;
+  const timestampMs = Date.parse(timestamp);
+
+  return !Number.isNaN(timestampMs) && timestampMs < fromMs;
 }
 
 function buildBitbucketBasicAuthHeader() {
@@ -424,6 +472,33 @@ async function fetchBitbucketPaginatedValues<T>(url: string, accessToken: string
   return values;
 }
 
+async function fetchBitbucketPaginatedPage<T>(url: string, accessToken: string) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new BitbucketApiError(
+      response.status,
+      `Unable to fetch Bitbucket data (${response.status}): ${errorText || response.statusText}`,
+    );
+  }
+
+  const payload = (await response.json()) as {
+    values?: T[];
+    next?: string;
+  };
+
+  return {
+    values: payload.values ?? [],
+    nextUrl: payload.next ?? null,
+  };
+}
+
 async function fetchBitbucketWorkspaces(accessToken: string) {
   const memberships = await fetchBitbucketPaginatedValues<{
     workspace?: BitbucketWorkspace;
@@ -590,7 +665,10 @@ async function fetchJiraEntries(accessToken: string): Promise<DashboardEntry[]> 
   });
 }
 
-async function fetchBitbucketEntries(accountEntry: ConnectedAccount): Promise<DashboardEntry[]> {
+async function fetchBitbucketEntries(
+  accountEntry: ConnectedAccount,
+  dateWindow: DateWindow | null,
+): Promise<DashboardEntry[]> {
   let accessToken = accountEntry.accessToken;
 
   if (
@@ -623,30 +701,37 @@ async function fetchBitbucketEntries(accountEntry: ConnectedAccount): Promise<Da
     repositories = await fetchBitbucketRepositories(accessToken);
   }
 
-  repositories = repositories.slice(0, 3);
   const entries: DashboardEntry[] = [];
 
   const fetchRepositoryCommits = async (token: string, repository: BitbucketRepository) => {
-    const commitsResponse = await fetch(
-      `https://api.bitbucket.org/2.0/repositories/${repository.workspace}/${repository.slug}/commits?pagelen=3`,
-      {
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    );
+    const commits: Array<{
+      hash?: string;
+      date?: string;
+      message?: string;
+      links?: {
+        html?: {
+          href?: string;
+        };
+      };
+    }> = [];
 
-    if (!commitsResponse.ok) {
-      const errorText = await commitsResponse.text();
-      throw new BitbucketApiError(
-        commitsResponse.status,
-        `Unable to fetch Bitbucket commits (${commitsResponse.status}): ${errorText || commitsResponse.statusText}`,
-      );
-    }
+    let nextUrl: string | null =
+      `https://api.bitbucket.org/2.0/repositories/${repository.workspace}/${repository.slug}/commits?pagelen=100`;
 
-    return commitsResponse.json() as Promise<{
-      values?: Array<{
+    while (nextUrl) {
+      const pageResult: {
+        values: Array<{
+          hash?: string;
+          date?: string;
+          message?: string;
+          links?: {
+            html?: {
+              href?: string;
+            };
+          };
+        }>;
+        nextUrl: string | null;
+      } = await fetchBitbucketPaginatedPage<{
         hash?: string;
         date?: string;
         message?: string;
@@ -655,31 +740,85 @@ async function fetchBitbucketEntries(accountEntry: ConnectedAccount): Promise<Da
             href?: string;
           };
         };
-      }>;
-    }>;
+      }>(nextUrl, token);
+
+      let reachedBeforeWindow = false;
+
+      for (const commit of pageResult.values) {
+        if (!isTimestampInWindow(commit.date, dateWindow)) {
+          if (isOlderThanWindow(commit.date, dateWindow)) {
+            reachedBeforeWindow = true;
+          }
+
+          continue;
+        }
+
+        commits.push(commit);
+      }
+
+      if (reachedBeforeWindow) {
+        break;
+      }
+
+      nextUrl = pageResult.nextUrl;
+    }
+
+    return commits;
   };
 
   const fetchRepositoryPullRequests = async (token: string, repository: BitbucketRepository) => {
-    const pullRequestsResponse = await fetch(
-      `https://api.bitbucket.org/2.0/repositories/${repository.workspace}/${repository.slug}/pullrequests?sort=-updated_on&pagelen=3`,
-      {
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    );
+    const pullRequests: Array<{
+      id?: number;
+      title?: string;
+      state?: string;
+      created_on?: string;
+      updated_on?: string;
+      source?: {
+        branch?: {
+          name?: string;
+        };
+      };
+      destination?: {
+        branch?: {
+          name?: string;
+        };
+      };
+      links?: {
+        html?: {
+          href?: string;
+        };
+      };
+    }> = [];
 
-    if (!pullRequestsResponse.ok) {
-      const errorText = await pullRequestsResponse.text();
-      throw new BitbucketApiError(
-        pullRequestsResponse.status,
-        `Unable to fetch Bitbucket pull requests (${pullRequestsResponse.status}): ${errorText || pullRequestsResponse.statusText}`,
-      );
-    }
+    let nextUrl: string | null =
+      `https://api.bitbucket.org/2.0/repositories/${repository.workspace}/${repository.slug}/pullrequests?sort=-updated_on&pagelen=100`;
 
-    return pullRequestsResponse.json() as Promise<{
-      values?: Array<{
+    while (nextUrl) {
+      const pageResult: {
+        values: Array<{
+          id?: number;
+          title?: string;
+          state?: string;
+          created_on?: string;
+          updated_on?: string;
+          source?: {
+            branch?: {
+              name?: string;
+            };
+          };
+          destination?: {
+            branch?: {
+              name?: string;
+            };
+          };
+          links?: {
+            html?: {
+              href?: string;
+            };
+          };
+        }>;
+        nextUrl: string | null;
+      } = await fetchBitbucketPaginatedPage<{
         id?: number;
         title?: string;
         state?: string;
@@ -700,23 +839,45 @@ async function fetchBitbucketEntries(accountEntry: ConnectedAccount): Promise<Da
             href?: string;
           };
         };
-      }>;
-    }>;
+      }>(nextUrl, token);
+
+      let reachedBeforeWindow = false;
+
+      for (const pullRequest of pageResult.values) {
+        const occurredAt = pullRequest.updated_on ?? pullRequest.created_on ?? null;
+
+        if (!isTimestampInWindow(occurredAt ?? undefined, dateWindow)) {
+          if (isOlderThanWindow(occurredAt ?? undefined, dateWindow)) {
+            reachedBeforeWindow = true;
+          }
+
+          continue;
+        }
+
+        pullRequests.push(pullRequest);
+      }
+
+      if (reachedBeforeWindow) {
+        break;
+      }
+
+      nextUrl = pageResult.nextUrl;
+    }
+
+    return pullRequests;
   };
 
   for (const repository of repositories) {
-    let commitsPayload: {
-      values?: Array<{
-        hash?: string;
-        date?: string;
-        message?: string;
-        links?: {
-          html?: {
-            href?: string;
-          };
+    let commitsPayload: Array<{
+      hash?: string;
+      date?: string;
+      message?: string;
+      links?: {
+        html?: {
+          href?: string;
         };
-      }>;
-    };
+      };
+    }>;
 
     try {
       commitsPayload = await fetchRepositoryCommits(accessToken, repository);
@@ -734,7 +895,7 @@ async function fetchBitbucketEntries(accountEntry: ConnectedAccount): Promise<Da
       }
     }
 
-    for (const commit of commitsPayload.values ?? []) {
+    for (const commit of commitsPayload) {
       const shortHash = commit.hash?.slice(0, 7) ?? "commit";
       const timeSeconds = 30 * 60;
 
@@ -778,30 +939,28 @@ async function fetchBitbucketEntries(accountEntry: ConnectedAccount): Promise<Da
       });
     }
 
-    let pullRequestsPayload: {
-      values?: Array<{
-        id?: number;
-        title?: string;
-        state?: string;
-        created_on?: string;
-        updated_on?: string;
-        source?: {
-          branch?: {
-            name?: string;
-          };
+    let pullRequestsPayload: Array<{
+      id?: number;
+      title?: string;
+      state?: string;
+      created_on?: string;
+      updated_on?: string;
+      source?: {
+        branch?: {
+          name?: string;
         };
-        destination?: {
-          branch?: {
-            name?: string;
-          };
+      };
+      destination?: {
+        branch?: {
+          name?: string;
         };
-        links?: {
-          html?: {
-            href?: string;
-          };
+      };
+      links?: {
+        html?: {
+          href?: string;
         };
-      }>;
-    };
+      };
+    }>;
 
     try {
       pullRequestsPayload = await fetchRepositoryPullRequests(accessToken, repository);
@@ -819,7 +978,7 @@ async function fetchBitbucketEntries(accountEntry: ConnectedAccount): Promise<Da
       }
     }
 
-    for (const pullRequest of pullRequestsPayload.values ?? []) {
+    for (const pullRequest of pullRequestsPayload) {
       const prId = pullRequest.id ?? 0;
       const sourceBranch = pullRequest.source?.branch?.name ?? null;
       const destinationBranch = pullRequest.destination?.branch?.name ?? null;
@@ -922,6 +1081,7 @@ router.get("/integrations/timesheet", async (req, res) => {
 
   const partialFailures: string[] = [];
   let entries: DashboardEntry[] = [];
+  const dateWindow = parseDateWindow(req.query.from, req.query.to);
 
   const jiraResult = await fetchAtlassianEntriesWithRefresh(userId, atlassianAccount);
   if (jiraResult.failed) {
@@ -932,7 +1092,7 @@ router.get("/integrations/timesheet", async (req, res) => {
 
   if (directBitbucketAccount) {
     const { data, error } = await tryCatch(
-      fetchBitbucketEntries(directBitbucketAccount),
+      fetchBitbucketEntries(directBitbucketAccount, dateWindow),
     );
     if (error) {
       logger.warn({ err: error, userId }, "Failed to fetch Bitbucket entries");

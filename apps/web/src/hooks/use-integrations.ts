@@ -14,10 +14,10 @@ export function useIntegrationStatus(enabled = true) {
   });
 }
 
-export function useIntegrationTimesheet(enabled = true) {
+export function useIntegrationTimesheet(enabled = true, date?: string) {
   return useQuery({
-    queryKey: queryKeys.integrations.timesheet(),
-    queryFn: fetchIntegrationTimesheet,
+    queryKey: queryKeys.integrations.timesheet(date),
+    queryFn: () => fetchIntegrationTimesheet(date),
     enabled,
     refetchInterval: 30_000,
   });
