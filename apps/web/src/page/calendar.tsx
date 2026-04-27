@@ -158,7 +158,7 @@ function getWeekStart(date: Date) {
 }
 
 function getWeekEnd(date: Date) {
-  return addDays(getWeekStart(date), 4);
+  return addDays(getWeekStart(date), 6);
 }
 
 function mapIntegrationBlock(entry: IntegrationTimesheetEntry) {
@@ -670,7 +670,7 @@ export function CalendarPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(340px,0.9fr)]">
+      <div className="space-y-4">
         <Card className="border-border/70 shadow-sm">
           <CardHeader className="border-b border-border/60 pb-4">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -692,8 +692,8 @@ export function CalendarPage() {
                 Could not load calendar data.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <div className="flex min-w-[960px]">
+              <div className="overflow-hidden">
+                <div className="flex w-full">
                   <div className="sticky left-0 z-10 w-16 shrink-0 bg-background">
                     <div className="h-[calc(2.5rem+1px)] border-b border-r" />
                     <div className="flex h-14 items-center justify-end border-b border-r pr-2">
@@ -735,7 +735,7 @@ export function CalendarPage() {
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        <div className="grid gap-4 grid-cols-1">
           <Card className="border-border/70 shadow-sm">
             <CardHeader className="border-b border-border/60 pb-4">
               <div className="flex items-center justify-between gap-3">
@@ -857,18 +857,6 @@ export function CalendarPage() {
               </div>
             </CardContent>
           </Card>
-
-          <Card className="border-border/70 shadow-sm">
-            <CardHeader className="border-b border-border/60 pb-4">
-              <CardTitle className="text-base">How this works</CardTitle>
-              <CardDescription>
-                Synced Jira and Bitbucket entries are positioned from their timestamps. Manual planned work is stored per day and can be added or edited from the side panel.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-4 text-sm text-muted-foreground">
-              This keeps the page compatible with the current backend while still giving you a timeline-style calendar layout.
-            </CardContent>
-          </Card>
         </div>
       </div>
 
@@ -881,10 +869,6 @@ export function CalendarPage() {
         onSave={handleSave}
         onDelete={handleDelete}
       />
-
-      <Button className="sr-only" onClick={() => navigate("/today")}>
-        List view
-      </Button>
     </div>
   );
 }

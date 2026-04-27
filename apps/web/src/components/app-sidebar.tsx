@@ -34,6 +34,11 @@ import { useNavigate } from "react-router-dom";
 
 const workspaceNav = [
   {
+    label: "Calendar view",
+    href: "/calendar",
+    icon: CalendarDays,
+  },
+  {
     label: "Today",
     href: "/today",
     icon: CalendarDays,
