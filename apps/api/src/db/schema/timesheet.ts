@@ -30,6 +30,7 @@ export const timesheetEntry = pgTable(
     description: text("description").notNull(),
     jiraIssueKey: text("jira_issue_key"),
     hours: real("hours").notNull(),
+    startHour: real("start_hour").notNull().default(9),
     status: text("status", { enum: entryStatuses }).notNull().default("in-progress"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")

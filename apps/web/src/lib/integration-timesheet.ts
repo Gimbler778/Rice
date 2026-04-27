@@ -121,6 +121,7 @@ export function mapIntegrationEntryToTimesheetEntry(
     description: entry.description,
     jiraIssueKey,
     hours: toHoursWithDefault(entry.timeSeconds),
+      startHour: new Date(entry.occurredAt).getHours() + new Date(entry.occurredAt).getMinutes() / 60,
     status: "in-progress",
   };
 }

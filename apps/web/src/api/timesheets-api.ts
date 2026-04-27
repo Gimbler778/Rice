@@ -24,6 +24,7 @@ export type TimesheetEntryInput = {
   description: string;
   jiraIssueKey?: string;
   hours: number;
+  startHour?: number;
   status?: EntryStatus;
 };
 

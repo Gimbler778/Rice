@@ -66,9 +66,8 @@ import { getLocalIsoDateFromTimestamp, mapIntegrationCategory } from "@/lib/inte
 import type { IntegrationTimesheetEntry } from "@/types/integrations";
 
 const START_HOUR = 7;
-const END_HOUR = 22;
-const HOUR_HEIGHT = 64;
-const HOURS = Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, index) => START_HOUR + index);
+const END_HOUR = 23;
+const VISIBLE_HOURS = END_HOUR - START_HOUR;
 
 const CATEGORY_OPTIONS: EntryCategory[] = [
   "development",
@@ -83,6 +82,20 @@ const CATEGORY_OPTIONS: EntryCategory[] = [
   "events",
   "manual_other",
 ];
+
+const TIME_OPTIONS = Array.from(
+  { length: (END_HOUR - START_HOUR) * 2 + 1 },
+  (_, index) => START_HOUR + index * 0.5,
+);
+
+const ZOOM_PRESETS = [
+  { intervalMinutes: 60, hourHeight: 48 },
+  { intervalMinutes: 50, hourHeight: 56 },
+  { intervalMinutes: 40, hourHeight: 64 },
+  { intervalMinutes: 30, hourHeight: 72 },
+  { intervalMinutes: 20, hourHeight: 88 },
+  { intervalMinutes: 10, hourHeight: 104 },
+] as const;
 
 const ENTRY_COLORS: Partial<Record<EntryCategory, { bg: string; border: string; text: string }>> = {
   development: { bg: "bg-teal-50 dark:bg-teal-950/40", border: "border-l-teal-500", text: "text-teal-800 dark:text-teal-200" },
@@ -128,6 +141,21 @@ function formatDuration(hours: number) {
   }
 
   return `${wholeHours}:${String(minuteValue).padStart(2, "0")}`;
+}
+
+function buildTimeSlots(intervalMinutes: number) {
+  const slots: number[] = [];
+  const totalMinutes = VISIBLE_HOURS * 60;
+
+  for (let minutes = 0; minutes <= totalMinutes; minutes += intervalMinutes) {
+    slots.push(START_HOUR + minutes / 60);
+  }
+
+  if (slots[slots.length - 1] !== END_HOUR) {
+    slots.push(END_HOUR);
+  }
+
+  return slots;
 }
 
 function toIsoDate(date: Date) {
@@ -188,62 +216,94 @@ function syncedHours(entries: CalendarBlock[]) {
   return entries.reduce((sum, entry) => sum + entry.durationHours, 0);
 }
 
-function PlannedBlock({ entry, onClick }: { entry: TimesheetEntry; onClick: () => void }) {
-  const color = entryColor(entry.category);
+type TimelineBlock = {
+  id: string;
+  startHour: number;
+  durationHours: number;
+  category: EntryCategory;
+  description: string;
+  jiraIssueKey?: string;
+  kind: "planned" | "synced";
+  onClick?: () => void;
+};
 
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "w-full rounded px-2 py-0.5 text-left text-[11px] font-medium truncate border-l-2 transition-all",
-        color.bg,
-        color.border,
-        color.text,
-        "hover:brightness-95 dark:hover:brightness-110",
-      )}
-    >
-      {entry.description}
-      <span className="ml-1.5 font-mono opacity-60">{formatDuration(entry.hours)}</span>
-    </button>
-  );
+type PositionedTimelineBlock = TimelineBlock & {
+  lane: number;
+  laneCount: number;
+};
+
+function layoutTimelineBlocks(blocks: TimelineBlock[], hourHeight: number) {
+  const sortedBlocks = blocks.slice().sort((left, right) => {
+    const startDelta = left.startHour - right.startHour;
+    if (startDelta !== 0) {
+      return startDelta;
+    }
+
+    return right.durationHours - left.durationHours;
+  });
+
+  const laneEnds: number[] = [];
+  const positionedBlocks: PositionedTimelineBlock[] = [];
+
+  for (const block of sortedBlocks) {
+    const blockTop = (block.startHour - START_HOUR) * hourHeight;
+    const blockEnd = blockTop + Math.max(block.durationHours * hourHeight, 28);
+    let lane = laneEnds.findIndex((laneEnd) => laneEnd <= blockTop);
+
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(blockEnd);
+    } else {
+      laneEnds[lane] = blockEnd;
+    }
+
+    positionedBlocks.push({ ...block, lane, laneCount: 0 });
+  }
+
+  const laneCount = Math.max(1, laneEnds.length);
+  return positionedBlocks.map((block) => ({ ...block, laneCount }));
 }
 
-function SyncedBlock({ entry }: { entry: CalendarBlock }) {
-  const top = (entry.startHour - START_HOUR) * HOUR_HEIGHT;
-  const height = Math.max(entry.durationHours * HOUR_HEIGHT, 24);
-  const color = entryColor(entry.category);
+function TimelineBlockCard({ block, hourHeight }: { block: PositionedTimelineBlock; hourHeight: number }) {
+  const top = (block.startHour - START_HOUR) * hourHeight;
+  const height = Math.max(block.durationHours * hourHeight, 40);
+  const laneWidth = `calc((100% - ${(block.laneCount - 1) * 6}px) / ${block.laneCount})`;
+  const left = `calc(${block.lane} * (${laneWidth} + 6px))`;
+  const color = entryColor(block.category);
+  const BlockTag = block.onClick ? "button" : "div";
 
   return (
-    <div
+    <BlockTag
+      type={block.onClick ? "button" : undefined}
+      onClick={block.onClick}
       className={cn(
-        "absolute left-0.5 right-0.5 rounded-sm border-l-2 overflow-hidden select-none",
+        "absolute rounded-md border-l-2 overflow-hidden select-none text-left",
         "hover:brightness-95 dark:hover:brightness-110 transition-all",
         color.bg,
         color.border,
       )}
-      style={{ top, height }}
+      style={{ top, height, left, width: laneWidth }}
     >
-      <div className="px-1.5 py-0.5 h-full flex flex-col justify-between gap-1">
+      <div className="flex h-full flex-col justify-between gap-1 px-2 py-1">
         <div className="min-w-0">
-          <p className={cn("text-[11px] font-medium leading-tight truncate", color.text)}>{entry.description}</p>
+          <p className={cn("text-[11px] font-medium leading-tight line-clamp-2", color.text)}>{block.description}</p>
           <p className={cn("text-[10px] leading-tight truncate opacity-70", color.text)}>
-            {CATEGORY_LABELS[entry.category]}
-            {entry.jiraIssueKey ? ` · ${entry.jiraIssueKey}` : ""}
+            {CATEGORY_LABELS[block.category]}
+            {block.jiraIssueKey ? ` · ${block.jiraIssueKey}` : ""}
           </p>
         </div>
         <p className={cn("text-[10px] font-mono opacity-60", color.text)}>
-          {formatHour(entry.startHour)} - {formatHour(entry.startHour + entry.durationHours)}
+          {formatHour(block.startHour)} - {formatHour(block.startHour + block.durationHours)}
         </p>
       </div>
-    </div>
+    </BlockTag>
   );
 }
 
-function CurrentTimeIndicator() {
+function CurrentTimeIndicator({ hourHeight }: { hourHeight: number }) {
   const now = new Date();
   const currentHour = now.getHours() + now.getMinutes() / 60;
-  const top = (currentHour - START_HOUR) * HOUR_HEIGHT;
+  const top = (currentHour - START_HOUR) * hourHeight;
 
   if (currentHour < START_HOUR || currentHour > END_HOUR) {
     return null;
@@ -261,6 +321,8 @@ function DayColumn({
   date,
   plannedEntries,
   syncedEntries,
+  intervalMinutes,
+  hourHeight,
   selected,
   onSelect,
   onEditEntry,
@@ -269,6 +331,8 @@ function DayColumn({
   date: Date;
   plannedEntries: TimesheetEntry[];
   syncedEntries: CalendarBlock[];
+  intervalMinutes: number;
+  hourHeight: number;
   selected: boolean;
   onSelect: () => void;
   onEditEntry: (entry: TimesheetEntry) => void;
@@ -277,6 +341,33 @@ function DayColumn({
   const isCurrentDay = isSameDay(date, new Date());
   const plannedTotal = entryHours(plannedEntries);
   const syncedTotal = syncedHours(syncedEntries);
+  const timeSlots = useMemo(() => buildTimeSlots(intervalMinutes), [intervalMinutes]);
+  const dayHeight = VISIBLE_HOURS * hourHeight;
+  const timelineBlocks = useMemo(
+    () =>
+      layoutTimelineBlocks([
+        ...plannedEntries.map((entry) => ({
+          id: entry.id,
+          startHour: entry.startHour ?? 9,
+          durationHours: entry.hours,
+          category: entry.category,
+          description: entry.description,
+          jiraIssueKey: entry.jiraIssueKey,
+          kind: "planned" as const,
+          onClick: () => onEditEntry(entry),
+        })),
+        ...syncedEntries.map((entry) => ({
+          id: entry.id,
+          startHour: entry.startHour,
+          durationHours: entry.durationHours,
+          category: entry.category,
+          description: entry.description,
+          jiraIssueKey: entry.jiraIssueKey,
+          kind: "synced" as const,
+        })),
+      ], hourHeight),
+    [hourHeight, onEditEntry, plannedEntries, syncedEntries],
+  );
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -297,31 +388,31 @@ function DayColumn({
         </p>
       </button>
 
-      <div className="border-b border-r px-1 py-1 flex flex-col gap-1" style={{ height: 56 }}>
-        {plannedEntries.length > 0 ? (
-          plannedEntries.map((entry) => <PlannedBlock key={entry.id} entry={entry} onClick={() => onEditEntry(entry)} />)
-        ) : (
+      <div className={cn("relative border-r cursor-default", isCurrentDay && "bg-teal-50/20 dark:bg-teal-950/10")} style={{ height: dayHeight }}>
+        {timeSlots.map((slot, index) => {
+          const minuteValue = Math.round((slot - Math.floor(slot)) * 60);
+          const isHourMark = minuteValue === 0;
+
+          return (
+            <div
+              key={`slot-${slot}-${index}`}
+              className={cn("absolute left-0 right-0", isHourMark ? "border-t border-border/40" : "border-t border-dashed border-border/20")}
+              style={{ top: (slot - START_HOUR) * hourHeight }}
+            />
+          );
+        })}
+        {timelineBlocks.length === 0 ? (
           <button
             type="button"
             onClick={onAddEntry}
-            className="h-full rounded border border-dashed border-border/60 text-[11px] text-muted-foreground hover:bg-muted/40 transition-colors"
+            className="absolute inset-2 rounded border border-dashed border-border/60 text-[11px] text-muted-foreground hover:bg-muted/40 transition-colors flex items-center justify-center"
           >
             Add planned work
           </button>
+        ) : (
+          timelineBlocks.map((block) => <TimelineBlockCard key={block.kind + block.id} block={block} hourHeight={hourHeight} />)
         )}
-      </div>
-
-      <div className={cn("relative border-r cursor-default", isCurrentDay && "bg-teal-50/20 dark:bg-teal-950/10")} style={{ height: HOURS.length * HOUR_HEIGHT }}>
-        {HOURS.map((hour, index) => (
-          <div key={hour} className="absolute left-0 right-0 border-t border-border/40" style={{ top: index * HOUR_HEIGHT }} />
-        ))}
-        {HOURS.map((hour, index) => (
-          <div key={`half-${hour}`} className="absolute left-0 right-0 border-t border-dashed border-border/20" style={{ top: index * HOUR_HEIGHT + HOUR_HEIGHT / 2 }} />
-        ))}
-        {syncedEntries.map((entry) => (
-          <SyncedBlock key={entry.id} entry={entry} />
-        ))}
-        {isCurrentDay && <CurrentTimeIndicator />}
+        {isCurrentDay && <CurrentTimeIndicator hourHeight={hourHeight} />}
       </div>
     </div>
   );
@@ -348,6 +439,7 @@ function EntryDialog({
   const [description, setDescription] = useState("");
   const [jiraIssueKey, setJiraIssueKey] = useState("");
   const [hours, setHours] = useState(presetHours);
+  const [startHour, setStartHour] = useState(9);
 
   useEffect(() => {
     if (!open) {
@@ -358,6 +450,7 @@ function EntryDialog({
     setDescription(entry?.description ?? "");
     setJiraIssueKey(entry?.jiraIssueKey ?? "");
     setHours(entry?.hours ?? presetHours);
+    setStartHour(entry?.startHour ?? 9);
   }, [entry, open, presetHours]);
 
   const handleSave = async () => {
@@ -373,6 +466,7 @@ function EntryDialog({
           description,
           jiraIssueKey: jiraIssueKey.trim() || undefined,
           hours,
+          startHour,
         },
       });
     } else {
@@ -382,6 +476,7 @@ function EntryDialog({
         description,
         jiraIssueKey: jiraIssueKey.trim() || undefined,
         hours,
+        startHour,
         status: "in-progress",
       });
     }
@@ -441,6 +536,30 @@ function EntryDialog({
             />
             <span className="text-xs text-muted-foreground">hours</span>
           </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium">Start time</label>
+              <Select value={String(startHour)} onValueChange={(value) => setStartHour(Number(value))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select time" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIME_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={String(option)}>
+                      {formatHour(option)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium">End time</label>
+              <div className="flex h-10 items-center rounded-md border border-input bg-muted/30 px-3 text-sm text-muted-foreground">
+                {formatHour(startHour + hours)}
+              </div>
+            </div>
+          </div>
         </div>
 
         <DialogFooter>
@@ -474,6 +593,7 @@ export function CalendarPage() {
   const isAuthenticated = Boolean(session?.user?.id);
   const integrationTimesheetQuery = useIntegrationTimesheet(isAuthenticated);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [zoomLevel, setZoomLevel] = useState(0);
 
   const selectedDate = useMemo(() => parseSelectedDate(searchParams.get("date")), [searchParams]);
   const [weekStart, setWeekStart] = useState(() => getWeekStart(selectedDate));
@@ -494,6 +614,9 @@ export function CalendarPage() {
 
   const weekEnd = useMemo(() => getWeekEnd(weekStart), [weekStart]);
   const weekDays = useMemo(() => eachDayOfInterval({ start: weekStart, end: weekEnd }), [weekStart, weekEnd]);
+  const { intervalMinutes, hourHeight } = ZOOM_PRESETS[zoomLevel];
+  const timeSlots = useMemo(() => buildTimeSlots(intervalMinutes), [intervalMinutes]);
+  const calendarHeight = VISIBLE_HOURS * hourHeight;
   const weekStartKey = toIsoDate(weekStart);
   const weekEndKey = toIsoDate(weekEnd);
   const weekLabel = `${format(weekStart, "MMM d")} – ${format(weekEnd, "MMM d, yyyy")}`;
@@ -611,6 +734,14 @@ export function CalendarPage() {
     });
   };
 
+  const handleZoomIn = () => {
+    setZoomLevel((current) => Math.min(ZOOM_PRESETS.length - 1, current + 1));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel((current) => Math.max(0, current - 1));
+  };
+
   const handleSelectDay = (date: Date) => {
     const dateKey = toIsoDate(date);
     setSearchParams((prev) => {
@@ -663,6 +794,27 @@ export function CalendarPage() {
           <Button variant="outline" size="sm" onClick={handleThisWeek}>
             This week
           </Button>
+          <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/90 px-2 py-1">
+            <span className="text-[11px] text-muted-foreground">Zoom</span>
+            <Button variant="outline" size="sm" className="h-7 px-2" onClick={handleZoomOut}>
+              -
+            </Button>
+            <input
+              type="range"
+              min={0}
+              max={ZOOM_PRESETS.length - 1}
+              step={1}
+              value={zoomLevel}
+              onChange={(event) => setZoomLevel(Number(event.target.value))}
+              className="h-7 w-24"
+            />
+            <Button variant="outline" size="sm" className="h-7 px-2" onClick={handleZoomIn}>
+              +
+            </Button>
+            <span className="w-9 text-right text-[11px] font-medium text-muted-foreground">
+              {intervalMinutes === 60 ? "1h" : `${intervalMinutes}m`}
+            </span>
+          </div>
           <Button size="sm" onClick={() => openCreateDialog(selectedDateKey, 1)}>
             <Plus className="mr-1.5 size-4" />
             Add activity
@@ -699,13 +851,19 @@ export function CalendarPage() {
                     <div className="flex h-14 items-center justify-end border-b border-r pr-2">
                       <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Planned</span>
                     </div>
-                    {HOURS.map((hour) => (
-                      <div key={hour} className="relative border-r" style={{ height: HOUR_HEIGHT }}>
-                        <span className="absolute -top-2 right-2 text-[10px] font-mono tabular-nums text-muted-foreground">
-                          {hour === 12 ? "12 PM" : hour < 12 ? `${hour} AM` : `${hour - 12} PM`}
-                        </span>
-                      </div>
-                    ))}
+                    <div className="relative border-r" style={{ height: calendarHeight }}>
+                      {timeSlots
+                        .filter((slot) => slot <= END_HOUR)
+                        .map((slot, index) => (
+                          <span
+                            key={`label-${slot}-${index}`}
+                            className="absolute -top-2 right-1 text-[11px] font-mono tabular-nums text-muted-foreground"
+                            style={{ top: (slot - START_HOUR) * hourHeight }}
+                          >
+                            {formatHour(slot)}
+                          </span>
+                        ))}
+                    </div>
                   </div>
 
                   <div className="flex min-w-0 flex-1">
@@ -721,6 +879,8 @@ export function CalendarPage() {
                           date={day}
                           plannedEntries={plannedEntries}
                           syncedEntries={syncedEntries}
+                          intervalMinutes={intervalMinutes}
+                          hourHeight={hourHeight}
                           selected={isSelected}
                           onSelect={() => handleSelectDay(day)}
                           onEditEntry={openEditDialog}

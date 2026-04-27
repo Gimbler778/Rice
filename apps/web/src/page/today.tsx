@@ -324,6 +324,7 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
     description: "",
     jiraIssueKey: "",
     hours: 1,
+    startHour: 9,
   });
 
   const handleAdd = () => {
@@ -334,6 +335,7 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
       description: values.description,
       jiraIssueKey: values.jiraIssueKey || undefined,
       hours: values.hours,
+      startHour: values.startHour,
     });
   };
 
