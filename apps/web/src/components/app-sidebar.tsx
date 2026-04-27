@@ -27,11 +27,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { authClient } from "@/lib/auth-client";
+import { type AppRole, getSessionUserRole } from "@/lib/roles";
 import { useNavigate } from "react-router-dom";
-
-// Types
-
-type UserRole = "developer" | "manager" | "admin" | "auditor";
 
 // Nav config
 
@@ -58,14 +55,14 @@ const reportsNav = [
     label: "My reports",
     href: "/reports",
     icon: BarChart3,
-    roles: ["developer", "manager", "admin", "auditor"] as UserRole[],
+    roles: ["developer", "manager", "admin", "auditor"] as AppRole[],
   },
   {
     label: "Team view",
     href: "/reports/team",
     icon: BarChart3,
     // Only managers and admins see team view
-    roles: ["manager", "admin"] as UserRole[],
+    roles: ["manager", "admin"] as AppRole[],
   },
 ];
 
@@ -74,7 +71,7 @@ const adminNav = [
     label: "Admin panel",
     href: "/admin",
     icon: Settings,
-    roles: ["admin"] as UserRole[],
+    roles: ["admin"] as AppRole[],
   },
 ];
 
@@ -90,7 +87,7 @@ const signOutActionClassName =
 type SidebarAccountMenuProps = {
   userInitials: string;
   userName?: string;
-  userRole: UserRole;
+  userRole: AppRole;
   onSignOut: () => Promise<void>;
 };
 
@@ -133,9 +130,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
 
-  // TODO: Replace with real role from session once RBAC is wired
-  // e.g. const userRole = session?.user.role as UserRole ?? "developer"
-  const userRole: UserRole = "developer";
+  const userRole = getSessionUserRole(session) ?? "developer";
 
   const userInitials = session?.user?.name
     ? session.user.name
