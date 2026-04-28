@@ -440,6 +440,65 @@ async function fetchAtlassianEntriesWithRefresh(
   };
 }
 
+async function fetchBitbucketEntriesWithRefresh(
+  userId: string,
+  bitbucketAccount: ConnectedAccount | undefined,
+  dateWindow: DateWindow | null,
+) {
+  if (!bitbucketAccount?.accessToken) {
+    return {
+      entries: [] as DashboardEntry[],
+      failed: false,
+    };
+  }
+
+  const runBitbucketFetch = async () =>
+    fetchBitbucketEntries(bitbucketAccount, dateWindow);
+
+  let result = await tryCatch(runBitbucketFetch());
+
+  if (
+    result.error &&
+    bitbucketAccount.refreshToken &&
+    isBitbucketUnauthorizedError(result.error)
+  ) {
+    const { data: refreshedAccessToken, error: refreshError } = await tryCatch(
+      refreshBitbucketAccessToken(bitbucketAccount.refreshToken),
+    );
+
+    if (!refreshError) {
+      // Create an updated account with the new access token and retry
+      const updatedAccount: ConnectedAccount = {
+        ...bitbucketAccount,
+        accessToken: refreshedAccessToken,
+      };
+
+      // Note: Bitbucket refresh only returns the access token, not expiry info.
+      // We update the token in-memory for this request but don't persist.
+      // The database will still have the old token until next Bitbucket re-connection.
+      result = await tryCatch(fetchBitbucketEntries(updatedAccount, dateWindow));
+    } else {
+      logger.warn(
+        { err: refreshError, userId },
+        "Failed to refresh Bitbucket token after unauthorized response",
+      );
+    }
+  }
+
+  if (result.error) {
+    logger.warn({ err: result.error, userId }, "Failed to fetch Bitbucket entries");
+    return {
+      entries: [] as DashboardEntry[],
+      failed: true,
+    };
+  }
+
+  return {
+    entries: result.data ?? [],
+    failed: false,
+  };
+}
+
 async function fetchBitbucketPaginatedValues<T>(url: string, accessToken: string) {
   const values: T[] = [];
   let nextUrl: string | null = url;
@@ -1105,14 +1164,15 @@ router.get("/integrations/timesheet", async (req, res) => {
   }
 
   if (directBitbucketAccount) {
-    const { data, error } = await tryCatch(
-      fetchBitbucketEntries(directBitbucketAccount, dateWindow),
+    const bitbucketResult = await fetchBitbucketEntriesWithRefresh(
+      userId,
+      directBitbucketAccount,
+      dateWindow,
     );
-    if (error) {
-      logger.warn({ err: error, userId }, "Failed to fetch Bitbucket entries");
+    if (bitbucketResult.failed) {
       partialFailures.push("bitbucket");
     } else {
-      entries = [...entries, ...data];
+      entries = [...entries, ...bitbucketResult.entries];
     }
   }
 

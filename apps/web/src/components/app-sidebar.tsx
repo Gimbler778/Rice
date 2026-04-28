@@ -109,7 +109,7 @@ function SidebarAccountMenu({
           </div>
         </SidebarMenuButton>
       </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-56 p-1.5 flex-col gap-1">
+      <PopoverContent side="top" align="start" className="w-48 p-1.5 flex-col gap-1">
         <Link to="/profile" className={profileActionClassName}>
           <User className="size-4 shrink-0" />
           <span>Profile</span>

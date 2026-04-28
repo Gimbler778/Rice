@@ -554,7 +554,7 @@ function EntryTable({ entries, onDelete, onUpdate, onAdd }: EntryTableProps) {
                   Description
                 </th>
                 <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-48">
-                  Jira/BB link
+                  Source
                 </th>
                 <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground w-16">
                   Time
@@ -650,7 +650,9 @@ function SuggestionsPanel({
     <div className="flex max-h-[calc(100vh-12rem)] flex-col gap-3 overflow-y-auto pr-1">
       {/* Panel header */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-foreground">Suggestions</span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-500/10 px-2.5 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-500/20 dark:bg-teal-400/10 dark:text-teal-200 dark:ring-teal-400/20">
+          Suggestions
+        </span>
         {newCount > 0 && (
           <Badge className="text-[10px] px-1.5 py-0 bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 border-0">
             {newCount} new
