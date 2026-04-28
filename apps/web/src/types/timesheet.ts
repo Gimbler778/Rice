@@ -34,6 +34,7 @@ export interface TimesheetEntry {
   source?: EntrySource;
   sourceLink?: string;
   hours: number; // decimal, e.g. 2.5
+  startHour?: number; // decimal hour when activity starts, e.g. 10, 14.5
   status: EntryStatus;
 }
 
@@ -124,6 +125,7 @@ export const mockTodayEntries: TimesheetEntry[] = [
     description: "Timesheet entry table component",
     jiraIssueKey: "RICE-42",
     hours: 2.5,
+    startHour: 9,
     status: "in-progress",
   },
   {
@@ -133,6 +135,7 @@ export const mockTodayEntries: TimesheetEntry[] = [
     description: "PR review — auth middleware",
     jiraIssueKey: "RICE-38",
     hours: 1.0,
+    startHour: 11.5,
     status: "in-progress",
   },
   {
@@ -141,6 +144,7 @@ export const mockTodayEntries: TimesheetEntry[] = [
     category: "meetings",
     description: "Daily standup",
     hours: 0.5,
+    startHour: 12.5,
     status: "in-progress",
   },
   {
@@ -150,6 +154,7 @@ export const mockTodayEntries: TimesheetEntry[] = [
     description: "Unit tests — entry CRUD hooks",
     jiraIssueKey: "RICE-44",
     hours: 1.5,
+    startHour: 13,
     status: "in-progress",
   },
   {
@@ -158,6 +163,7 @@ export const mockTodayEntries: TimesheetEntry[] = [
     category: "documentation",
     description: "API contract notes for frontend",
     hours: 1.0,
+      startHour: 14.5,
     status: "in-progress",
   },
 ];

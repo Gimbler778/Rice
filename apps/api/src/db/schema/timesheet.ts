@@ -33,6 +33,7 @@ export const timesheetEntry = pgTable(
     source: text("source", { enum: entrySources }),
     sourceLink: text("source_link"),
     hours: real("hours").notNull(),
+    startHour: real("start_hour").notNull().default(9),
     status: text("status", { enum: entryStatuses }).notNull().default("in-progress"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")

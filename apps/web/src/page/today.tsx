@@ -378,6 +378,7 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
     source: "" as "" | EntrySource,
     sourceLink: "",
     hours: 1,
+    startHour: 9,
   });
 
   const handleAdd = () => {
@@ -399,6 +400,7 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
       source: values.source || undefined,
       sourceLink: values.sourceLink || undefined,
       hours: values.hours,
+      startHour: values.startHour,
     });
   };
 

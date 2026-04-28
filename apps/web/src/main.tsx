@@ -30,6 +30,10 @@ const WeekPage = lazy(async () => ({
   default: (await import("@/page/week")).WeekPage,
 }));
 
+const CalendarPage = lazy(async () => ({
+  default: (await import("@/page/calendar")).CalendarPage,
+}));
+
 const LogsPage = lazy(async () => ({
   default: (await import("@/page/logs")).LogsPage,
 }));
@@ -110,6 +114,7 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="/" element={<RootLayout />}>
                   <Route index element={<LoginPage />} />
                   <Route element={<RouteProtector />}>
+                    <Route path="calendar" element={<CalendarPage />} />
                     <Route path="today" element={<TodayPage />} />
                     <Route path="week" element={<WeekPage />} />
                     <Route path="logs" element={<LogsPage />} />

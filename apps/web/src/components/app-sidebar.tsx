@@ -44,6 +44,11 @@ const workspaceNav = [
     icon: CalendarRange,
   },
   {
+    label: "Calendar view",
+    href: "/calendar",
+    icon: CalendarDays,
+  },
+  {
     label: "Logs history",
     href: "/logs",
     icon: History,
@@ -100,12 +105,19 @@ function SidebarAccountMenu({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <SidebarMenuButton tooltip="Account" className={accountTriggerClassName}>
+        <SidebarMenuButton
+          tooltip="Account"
+          className={accountTriggerClassName}
+        >
           <div className={accountAvatarClassName}>{userInitials}</div>
           <div className="flex flex-col min-w-0 text-left group-data-[collapsible=icon]:hidden">
-            <span className="text-xs font-medium truncate">{userName ?? "User"}</span>
+            <span className="text-xs font-medium truncate">
+              {userName ?? "User"}
+            </span>
             {/* TODO: replace "Developer" with session?.user?.role once RBAC lands */}
-            <span className="text-xs text-muted-foreground capitalize">{userRole}</span>
+            <span className="text-xs text-muted-foreground capitalize">
+              {userRole}
+            </span>
           </div>
         </SidebarMenuButton>
       </PopoverTrigger>
@@ -114,7 +126,11 @@ function SidebarAccountMenu({
           <User className="size-4 shrink-0" />
           <span>Profile</span>
         </Link>
-        <button type="button" onClick={onSignOut} className={signOutActionClassName}>
+        <button
+          type="button"
+          onClick={onSignOut}
+          className={signOutActionClassName}
+        >
           <LogOut className="size-4 shrink-0" />
           <span>Sign out</span>
         </button>
@@ -161,9 +177,8 @@ export function AppSidebar() {
       <SidebarSeparator />
 
       <SidebarContent>
-        
         {/* Workspace section */}
-        
+
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -257,3 +272,4 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+

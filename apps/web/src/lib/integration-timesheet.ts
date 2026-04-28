@@ -123,6 +123,7 @@ export function mapIntegrationEntryToTimesheetEntry(
     source: sourceMap[entry.source],
     sourceLink: entry.link ?? undefined,
     hours: toHoursWithDefault(entry.timeSeconds),
+      startHour: new Date(entry.occurredAt).getHours() + new Date(entry.occurredAt).getMinutes() / 60,
     status: "in-progress",
   };
 }
