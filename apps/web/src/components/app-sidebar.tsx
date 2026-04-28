@@ -31,8 +31,6 @@ import { authClient } from "@/lib/auth-client";
 import { type AppRole, getSessionUserRole } from "@/lib/roles";
 import { useNavigate } from "react-router-dom";
 
-import { ThemeSwitcher } from "./ui/theme-switcher";
-
 // Nav config
 
 const workspaceNav = [
