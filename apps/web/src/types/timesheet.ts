@@ -19,6 +19,9 @@ export type TimesheetStatus = "draft" | "submitted" | "approved";
 /** Status of an individual log entry (used in logs history page). */
 export type EntryStatus = "accepted" | "in-progress" | "on-hold";
 
+/** Source system for an entry reference. */
+export type EntrySource = "jira" | "bitbucket";
+
 // Core entity types
 
 /** A single timesheet entry (one row in the entry table). */
@@ -28,6 +31,8 @@ export interface TimesheetEntry {
   category: EntryCategory;
   description: string;
   jiraIssueKey?: string; // e.g. "RICE-42"
+  source?: EntrySource;
+  sourceLink?: string;
   hours: number; // decimal, e.g. 2.5
   status: EntryStatus;
 }
@@ -54,13 +59,14 @@ export interface LearningEntry {
 /** A suggestion card from JIRA or Bitbucket. */
 export interface Suggestion {
   id: string;
-  source: "jira" | "bitbucket";
+  source: EntrySource;
   title: string;
   subtitle: string; // e.g. "Transitioned · 2h ago" or "rice-frontend · last commit 1h ago"
   status?: string; // e.g. "In progress", "In review"
   estimatedHours?: number;
   suggestedCategory: EntryCategory;
   jiraIssueKey?: string;
+  sourceLink?: string;
 }
 
 /** Cross-check prompt banner shown in the suggestions panel. */
@@ -68,7 +74,7 @@ export interface CrossCheckPrompt {
   id: string;
   message: string;
   suggestedCategory: EntryCategory;
-  source: "jira" | "bitbucket";
+  source: EntrySource;
 }
 
 // Category display helpers
@@ -217,6 +223,7 @@ export const mockCrossChecks: CrossCheckPrompt[] = [
     id: "cc-1",
     message: "You reviewed 2 PRs today but have no Code Review entry logged.",
     suggestedCategory: "code_review",
+    source: "bitbucket",
   },
 ];
 

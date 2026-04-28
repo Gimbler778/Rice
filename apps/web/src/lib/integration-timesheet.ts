@@ -120,6 +120,8 @@ export function mapIntegrationEntryToTimesheetEntry(
     category: mapIntegrationCategory(entry.category),
     description: entry.description,
     jiraIssueKey,
+    source: sourceMap[entry.source],
+    sourceLink: entry.link ?? undefined,
     hours: toHoursWithDefault(entry.timeSeconds),
     status: "in-progress",
   };
@@ -153,6 +155,7 @@ export function mapIntegrationEntryToSuggestion(
     estimatedHours,
     suggestedCategory: mapIntegrationCategory(entry.category),
     jiraIssueKey,
+    sourceLink: entry.link ?? undefined,
   };
 }
 

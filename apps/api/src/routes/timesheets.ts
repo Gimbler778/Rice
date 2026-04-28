@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/db/client";
 import {
   entryCategories,
+  entrySources,
   entryStatuses,
   timesheetEntry,
 } from "@/db/schema";
@@ -33,6 +34,8 @@ const createEntrySchema = z.object({
   category: z.enum(entryCategories),
   description: z.string().trim().min(1).max(500),
   jiraIssueKey: z.string().trim().min(1).max(50).optional(),
+  source: z.enum(entrySources).optional(),
+  sourceLink: z.url().trim().max(2048).optional(),
   hours: z.number().positive().max(24),
   status: z.enum(entryStatuses).optional(),
 });
@@ -42,6 +45,8 @@ const updateEntrySchema = z
     category: z.enum(entryCategories).optional(),
     description: z.string().trim().min(1).max(500).optional(),
     jiraIssueKey: z.string().trim().min(1).max(50).nullable().optional(),
+    source: z.enum(entrySources).nullable().optional(),
+    sourceLink: z.url().trim().max(2048).nullable().optional(),
     hours: z.number().positive().max(24).optional(),
     status: z.enum(entryStatuses).optional(),
   })
@@ -117,12 +122,16 @@ function buildCopySignature(entry: {
   category: string;
   description: string;
   jiraIssueKey: string | null;
+  source: string | null;
+  sourceLink: string | null;
   hours: number;
 }) {
   return [
     entry.category,
     entry.description.trim().toLowerCase(),
     entry.jiraIssueKey ?? "",
+    entry.source ?? "",
+    entry.sourceLink ?? "",
     entry.hours.toFixed(2),
   ].join("|");
 }
@@ -254,6 +263,8 @@ router.post("/timesheets/entries", async (req, res) => {
         category: parsedBody.data.category,
         description: parsedBody.data.description,
         jiraIssueKey: parsedBody.data.jiraIssueKey,
+        source: parsedBody.data.source,
+        sourceLink: parsedBody.data.sourceLink,
         hours: parsedBody.data.hours,
         status: parsedBody.data.status ?? "in-progress",
       })
@@ -301,6 +312,9 @@ router.patch("/timesheets/entries/:id", async (req, res) => {
           parsedBody.data.jiraIssueKey === null
             ? null
             : parsedBody.data.jiraIssueKey,
+        source: parsedBody.data.source === null ? null : parsedBody.data.source,
+        sourceLink:
+          parsedBody.data.sourceLink === null ? null : parsedBody.data.sourceLink,
         updatedAt: new Date(),
       })
       .where(
@@ -421,6 +435,8 @@ router.post("/timesheets/copy-yesterday", async (req, res) => {
         category: timesheetEntry.category,
         description: timesheetEntry.description,
         jiraIssueKey: timesheetEntry.jiraIssueKey,
+        source: timesheetEntry.source,
+        sourceLink: timesheetEntry.sourceLink,
         hours: timesheetEntry.hours,
       })
       .from(timesheetEntry)
@@ -448,6 +464,8 @@ router.post("/timesheets/copy-yesterday", async (req, res) => {
       category: entry.category,
       description: entry.description,
       jiraIssueKey: entry.jiraIssueKey,
+      source: entry.source,
+      sourceLink: entry.sourceLink,
       hours: entry.hours,
       status: "in-progress" as const,
     }));

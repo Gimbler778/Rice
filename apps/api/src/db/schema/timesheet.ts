@@ -17,6 +17,7 @@ export const entryCategories = [
 ] as const;
 
 export const entryStatuses = ["accepted", "in-progress", "on-hold"] as const;
+export const entrySources = ["jira", "bitbucket"] as const;
 
 export const timesheetEntry = pgTable(
   "timesheet_entry",
@@ -29,6 +30,8 @@ export const timesheetEntry = pgTable(
     category: text("category", { enum: entryCategories }).notNull(),
     description: text("description").notNull(),
     jiraIssueKey: text("jira_issue_key"),
+    source: text("source", { enum: entrySources }),
+    sourceLink: text("source_link"),
     hours: real("hours").notNull(),
     status: text("status", { enum: entryStatuses }).notNull().default("in-progress"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

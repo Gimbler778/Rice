@@ -1,5 +1,10 @@
 import { api } from "@/lib/api-client";
-import type { EntryCategory, EntryStatus, TimesheetEntry } from "@/types/timesheet";
+import type {
+  EntryCategory,
+  EntrySource,
+  EntryStatus,
+  TimesheetEntry,
+} from "@/types/timesheet";
 import type { ApiSuccessResponse } from "@/types/integrations";
 
 type TimesheetByDateResponse = {
@@ -23,12 +28,18 @@ export type TimesheetEntryInput = {
   category: EntryCategory;
   description: string;
   jiraIssueKey?: string;
+  source?: EntrySource;
+  sourceLink?: string;
   hours: number;
   status?: EntryStatus;
 };
 
 export type TimesheetEntryUpdateInput = Partial<
-  Omit<TimesheetEntryInput, "date"> & { jiraIssueKey: string | null }
+  Omit<TimesheetEntryInput, "date"> & {
+    jiraIssueKey: string | null;
+    source: EntrySource | null;
+    sourceLink: string | null;
+  }
 >;
 
 export type TimesheetEntriesFilters = {

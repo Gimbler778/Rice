@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 import {
   type TimesheetEntry,
   type EntryCategory,
+  type EntrySource,
   type LearningEntry,
   type Suggestion,
   type CrossCheckPrompt,
@@ -71,6 +72,14 @@ function normalizeComparisonText(value: string) {
 
 function normalizeJiraKey(value?: string) {
   return value?.trim().toUpperCase() ?? "";
+}
+
+function formatEntrySourceShort(source?: EntrySource) {
+  if (!source) {
+    return "Link";
+  }
+
+  return source === "jira" ? "Jira" : "BB";
 }
 
 function findDuplicateEntryForSuggestion(
@@ -158,15 +167,28 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
     hours: entry.hours,
     category: entry.category,
     jiraIssueKey: entry.jiraIssueKey ?? "",
+    source: entry.source ?? "",
+    sourceLink: entry.sourceLink ?? "",
   });
 
   const handleSave = () => {
+    if (editValues.sourceLink.trim()) {
+      try {
+        new URL(editValues.sourceLink.trim());
+      } catch {
+        toast.error("Enter a valid source link URL.");
+        return;
+      }
+    }
+
     // Persisting is handled by the parent onUpdate callback.
     onUpdate(entry.id, {
       description: editValues.description,
       hours: editValues.hours,
       category: editValues.category,
       jiraIssueKey: editValues.jiraIssueKey || undefined,
+      source: (editValues.source || undefined) as EntrySource | undefined,
+      sourceLink: editValues.sourceLink || undefined,
     });
     setIsEditing(false);
   };
@@ -178,6 +200,8 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
       hours: entry.hours,
       category: entry.category,
       jiraIssueKey: entry.jiraIssueKey ?? "",
+      source: entry.source ?? "",
+      sourceLink: entry.sourceLink ?? "",
     });
     setIsEditing(false);
   };
@@ -216,16 +240,42 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
             placeholder="What did you work on?"
           />
         </td>
-        {/* JIRA key input */}
-        <td className="px-3 py-2">
-          <Input
-            className="h-8 text-xs w-24"
-            value={editValues.jiraIssueKey}
-            onChange={(e) =>
-              setEditValues((prev) => ({ ...prev, jiraIssueKey: e.target.value }))
-            }
-            placeholder="RICE-00"
-          />
+        {/* Jira/BB link */}
+        <td className="px-3 py-2 min-w-72">
+          <div className="flex items-center gap-2">
+            <Select
+              value={editValues.source || "none"}
+              onValueChange={(value) =>
+                setEditValues((prev) => ({
+                  ...prev,
+                  source: value === "none" ? "" : (value as EntrySource),
+                }))
+              }
+            >
+              <SelectTrigger className="h-8 text-xs w-28">
+                <SelectValue placeholder="None" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="text-xs">
+                  None
+                </SelectItem>
+                <SelectItem value="jira" className="text-xs">
+                  Jira
+                </SelectItem>
+                <SelectItem value="bitbucket" className="text-xs">
+                  Bitbucket
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              className="h-8 text-xs min-w-0 flex-1"
+              value={editValues.sourceLink}
+              onChange={(e) =>
+                setEditValues((prev) => ({ ...prev, sourceLink: e.target.value }))
+              }
+              placeholder="https://..."
+            />
+          </div>
         </td>
         {/* Hours input */}
         <td className="px-3 py-2">
@@ -269,14 +319,17 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
       <td className="px-3 py-2.5 text-sm text-foreground max-w-xs truncate">
         {entry.description}
       </td>
-      {/* JIRA link */}
-      <td className="px-3 py-2.5">
-        {entry.jiraIssueKey ? (
+      {/* Jira/BB link */}
+      <td className="px-3 py-2.5 max-w-xs truncate">
+        {entry.sourceLink ? (
           <a
-            href="#"
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-mono"
+            href={entry.sourceLink}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            title={entry.sourceLink}
           >
-            {entry.jiraIssueKey}
+            {formatEntrySourceShort(entry.source)}
           </a>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
@@ -322,17 +375,29 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
   const [values, setValues] = useState({
     category: "development" as EntryCategory,
     description: "",
-    jiraIssueKey: "",
+    source: "" as "" | EntrySource,
+    sourceLink: "",
     hours: 1,
   });
 
   const handleAdd = () => {
     if (!values.description.trim()) return;
+
+    if (values.sourceLink.trim()) {
+      try {
+        new URL(values.sourceLink.trim());
+      } catch {
+        toast.error("Enter a valid source link URL.");
+        return;
+      }
+    }
+
     // Persisting is handled by the parent onAdd callback.
     onAdd({
       category: values.category,
       description: values.description,
-      jiraIssueKey: values.jiraIssueKey || undefined,
+      source: values.source || undefined,
+      sourceLink: values.sourceLink || undefined,
       hours: values.hours,
     });
   };
@@ -368,13 +433,39 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
           onKeyDown={(e) => e.key === "Enter" && handleAdd()}
         />
       </td>
-      <td className="px-3 py-2">
-        <Input
-          className="h-8 text-xs w-24"
-          placeholder="RICE-00"
-          value={values.jiraIssueKey}
-          onChange={(e) => setValues((prev) => ({ ...prev, jiraIssueKey: e.target.value }))}
-        />
+      <td className="px-3 py-2 min-w-72">
+        <div className="flex items-center gap-2">
+          <Select
+            value={values.source || "none"}
+            onValueChange={(value) =>
+              setValues((prev) => ({
+                ...prev,
+                source: value === "none" ? "" : (value as EntrySource),
+              }))
+            }
+          >
+            <SelectTrigger className="h-8 text-xs w-28">
+              <SelectValue placeholder="None" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none" className="text-xs">
+                None
+              </SelectItem>
+              <SelectItem value="jira" className="text-xs">
+                Jira
+              </SelectItem>
+              <SelectItem value="bitbucket" className="text-xs">
+                Bitbucket
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            className="h-8 text-xs min-w-0 flex-1"
+            placeholder="https://..."
+            value={values.sourceLink}
+            onChange={(e) => setValues((prev) => ({ ...prev, sourceLink: e.target.value }))}
+          />
+        </div>
       </td>
       <td className="px-3 py-2">
         <Input
@@ -462,8 +553,8 @@ function EntryTable({ entries, onDelete, onUpdate, onAdd }: EntryTableProps) {
                 <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">
                   Description
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-24">
-                  JIRA
+                <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-48">
+                  Jira/BB link
                 </th>
                 <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground w-16">
                   Time
@@ -548,7 +639,7 @@ function SuggestionsPanel({
   const bitbucketSectionRef = useRef<HTMLDivElement | null>(null);
   const jiraSuggestions = suggestions.filter((s) => s.source === "jira");
   const bbSuggestions = suggestions.filter((s) => s.source === "bitbucket");
-  const newCount = suggestions.length + crossChecks.length;
+  const newCount = suggestions.length;
 
   const scrollToSection = (source: Suggestion["source"]) => {
     const targetRef = source === "jira" ? jiraSectionRef : bitbucketSectionRef;
@@ -970,6 +1061,9 @@ export function TodayPage() {
         hours: updates.hours,
         jiraIssueKey:
           updates.jiraIssueKey === undefined ? undefined : (updates.jiraIssueKey ?? null),
+        source: updates.source === undefined ? undefined : (updates.source ?? null),
+        sourceLink:
+          updates.sourceLink === undefined ? undefined : (updates.sourceLink ?? null),
         status: updates.status,
       }),
     );
@@ -994,6 +1088,8 @@ export function TodayPage() {
         category: entry.category,
         description: entry.description,
         jiraIssueKey: entry.jiraIssueKey,
+        source: entry.source,
+        sourceLink: entry.sourceLink,
         hours: entry.hours,
         status: "in-progress",
       }),
@@ -1041,6 +1137,8 @@ export function TodayPage() {
         category: sug.suggestedCategory,
         description: sug.title,
         jiraIssueKey: sug.jiraIssueKey,
+        source: sug.source,
+        sourceLink: sug.sourceLink,
         hours: sug.estimatedHours ?? duplicateEntry.hours,
       });
     } else {
@@ -1048,6 +1146,8 @@ export function TodayPage() {
         category: sug.suggestedCategory,
         description: sug.title,
         jiraIssueKey: sug.jiraIssueKey,
+        source: sug.source,
+        sourceLink: sug.sourceLink,
         hours: sug.estimatedHours ?? 1,
       });
     }
