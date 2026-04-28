@@ -2,7 +2,6 @@ import type {
   AdminCategory,
   AdminUser,
   AdminTeam,
-  IntegrationStatus,
   PolicySettings,
   UserRole,
 } from "./types";
@@ -32,10 +31,7 @@ export const MOCK_TEAMS: AdminTeam[] = [
   { id: "t2", name: "Platform team", memberIds: ["u1"], projects: ["Infra"] },
 ];
 
-export const MOCK_INTEGRATIONS: IntegrationStatus = {
-  jira: { connected: true, org: "iQM", connectedAt: "Mar 15, 2026" },
-  bitbucket: { connected: false },
-};
+
 
 export const MOCK_POLICY: PolicySettings = {
   dailyReminderTime: "17:00",

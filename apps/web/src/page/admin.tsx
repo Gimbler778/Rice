@@ -1,18 +1,17 @@
 import { useState } from "react";
 
-import { GitBranch, Plug, Settings, Tag, Users } from "lucide-react";
+import { GitBranch, Settings, Tag, Users } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
 
 import {
   MOCK_CATEGORIES,
-  MOCK_INTEGRATIONS,
   MOCK_POLICY,
   MOCK_TEAMS,
   MOCK_USERS,
 } from "./admin/mock-data";
 import { CategoriesTab } from "./admin/tabs/categories-tab";
-import { IntegrationsTab } from "./admin/tabs/integrations-tab";
+
 import { PolicyTab } from "./admin/tabs/policy-tab";
 import { TeamsTab } from "./admin/tabs/teams-tab";
 import { UsersTab } from "./admin/tabs/users-tab";
@@ -23,7 +22,6 @@ const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
   { id: "categories", label: "Categories", icon: Tag },
   { id: "users", label: "Users", icon: Users },
   { id: "teams", label: "Teams & projects", icon: GitBranch },
-  { id: "integrations", label: "Integrations", icon: Plug },
   { id: "policy", label: "Policy", icon: Settings },
 ];
 
@@ -33,7 +31,7 @@ export function AdminPage() {
   const [categories, setCategories] = useState(MOCK_CATEGORIES);
   const [users, setUsers] = useState(MOCK_USERS);
   const [teams, setTeams] = useState(MOCK_TEAMS);
-  const [integrations, setIntegrations] = useState(MOCK_INTEGRATIONS);
+
   const [policy, setPolicy] = useState(MOCK_POLICY);
 
   const { data: session } = authClient.useSession();
@@ -121,12 +119,7 @@ export function AdminPage() {
     );
   };
 
-  const handleDisconnect = (service: "jira" | "bitbucket") => {
-    setIntegrations((prev) => ({
-      ...prev,
-      [service]: { connected: false },
-    }));
-  };
+
 
   const handlePolicyChange = (updates: Partial<typeof policy>) => {
     setPolicy((prev) => ({ ...prev, ...updates }));
@@ -141,7 +134,7 @@ export function AdminPage() {
       <div className="border-b px-6 py-4 shrink-0">
         <h1 className="text-sm font-semibold">Admin panel</h1>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Manage categories, users, teams, integrations, and org-wide policy.
+          Manage categories, users, teams, and org-wide policy.
         </p>
       </div>
 
@@ -187,12 +180,7 @@ export function AdminPage() {
           />
         )}
 
-        {activeTab === "integrations" && (
-          <IntegrationsTab
-            integrations={integrations}
-            onDisconnect={handleDisconnect}
-          />
-        )}
+
 
         {activeTab === "policy" && (
           <PolicyTab

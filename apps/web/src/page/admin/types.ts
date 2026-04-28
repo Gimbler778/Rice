@@ -25,10 +25,7 @@ export interface AdminTeam {
   projects: string[];
 }
 
-export interface IntegrationStatus {
-  jira: { connected: boolean; org?: string; connectedAt?: string };
-  bitbucket: { connected: boolean; org?: string; connectedAt?: string };
-}
+
 
 export interface PolicySettings {
   dailyReminderTime: string;
@@ -43,5 +40,4 @@ export type AdminTab =
   | "categories"
   | "users"
   | "teams"
-  | "integrations"
   | "policy";
