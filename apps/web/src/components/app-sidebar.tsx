@@ -20,6 +20,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import {
   Popover,
@@ -29,6 +30,8 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { type AppRole, getSessionUserRole } from "@/lib/roles";
 import { useNavigate } from "react-router-dom";
+
+import { ThemeSwitcher } from "./ui/theme-switcher";
 
 // Nav config
 
@@ -166,11 +169,14 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       {/* Logo */}
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1">
-          <div className="size-2 rounded-full bg-primary shrink-0" />
-          <span className="font-semibold text-sm tracking-wide group-data-[collapsible=icon]:hidden">
-            RICE
-          </span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 px-2 py-1 group-data-[collapsible=icon]:hidden">
+            <div className="size-2 rounded-full bg-primary shrink-0" />
+            <span className="font-semibold text-sm tracking-wide">
+              RICE
+            </span>
+          </div>
+          <SidebarTrigger />
         </div>
       </SidebarHeader>
 
