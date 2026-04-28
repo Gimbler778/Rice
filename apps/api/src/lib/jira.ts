@@ -85,7 +85,7 @@ function uniqueStrings(values: Array<string | undefined | null>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
 
-export async function resolveJiraResource(accessToken: string) {
+export async function resolveJiraResources(accessToken: string) {
   const resourcesResponse = await fetch(
     "https://api.atlassian.com/oauth/token/accessible-resources",
     {
@@ -105,15 +105,22 @@ export async function resolveJiraResource(accessToken: string) {
   }
 
   const resources = (await resourcesResponse.json()) as JiraAccessibleResource[];
-  const jiraResource =
-    resources.find((resource) =>
-      (resource.scopes ?? []).some((scope) => scope.startsWith("read:jira")),
-    ) ?? resources.find((resource) => resource.url?.includes("atlassian.net"));
-
-  return {
-    cloudId: jiraResource?.id ?? null,
-    jiraSiteUrl: jiraResource?.url ?? null,
-  };
+  return resources
+    .filter(
+      (resource) =>
+        (resource.scopes ?? []).some((scope) => scope.startsWith("read:jira")) ||
+        Boolean(resource.url?.includes("atlassian.net")),
+    )
+    .flatMap((resource) =>
+      resource.id
+        ? [
+            {
+              cloudId: resource.id,
+              jiraSiteUrl: resource.url ?? null,
+            },
+          ]
+        : [],
+    );
 }
 
 export async function fetchAllJiraIssues(accessToken: string, cloudId: string) {

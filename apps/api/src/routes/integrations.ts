@@ -8,7 +8,7 @@ import { env } from "@/lib/env";
 import {
   fetchAllJiraIssues,
   isAtlassianUnauthorizedError,
-  resolveJiraResource,
+  resolveJiraResources,
 } from "@/lib/jira";
 import logger from "@/lib/logger";
 import { RESPONSE_CODE, sendError, sendSuccess } from "@/lib/response";
@@ -614,55 +614,69 @@ async function refreshBitbucketAccessToken(refreshToken: string) {
 }
 
 async function fetchJiraEntries(accessToken: string): Promise<DashboardEntry[]> {
-  const { cloudId, jiraSiteUrl } = await resolveJiraResource(accessToken);
+  const jiraResources = await resolveJiraResources(accessToken);
 
-  if (!cloudId) {
+  if (!jiraResources.length) {
     return [];
   }
 
-  const { issues } = await fetchAllJiraIssues(accessToken, cloudId);
+  const entries: DashboardEntry[] = [];
 
-  return issues.map((issue) => {
-    const timeSeconds = issue.timeSpentSeconds;
-    return {
-      id: `jira-${issue.id}`,
-      category: "Development",
-      description: `${issue.key || "Jira"} - ${issue.summary}`,
-      ref: issue.key || "N/A",
-      source: "Jira",
-      timeSeconds,
-      time: formatDuration(timeSeconds),
-      link: jiraSiteUrl && issue.key ? `${jiraSiteUrl}/browse/${issue.key}` : issue.self,
-      occurredAt: issue.updated,
-      relatedData: {
-        issueKey: issue.key,
-        projectKey: issue.projectKey,
-        projectName: issue.projectName,
-        issueType: issue.issueType,
-        status: issue.status,
-        assignee: issue.assignee,
-        parentKey: issue.parentKey,
-        labels: issue.labels,
-        linkedIssueKeys: issue.linkedIssueKeys,
-        createdAt: issue.created,
-        updatedAt: issue.updated,
-        repositoryFullName: null,
-        repositorySlug: null,
-        workspace: null,
-        commitHash: null,
-        commitMessage: null,
-        commitTimestamp: null,
-        pullRequestId: null,
-        pullRequestTitle: null,
-        pullRequestState: null,
-        pullRequestUrl: null,
-        pullRequestTimestamp: null,
-        sourceBranch: null,
-        destinationBranch: null,
-        branch: null,
-      },
-    };
-  });
+  for (const { cloudId, jiraSiteUrl } of jiraResources) {
+    try {
+      const { issues } = await fetchAllJiraIssues(accessToken, cloudId);
+
+      for (const issue of issues) {
+        const timeSeconds = issue.timeSpentSeconds;
+        const source: "Jira" = "Jira";
+        entries.push({
+          id: `jira-${cloudId}-${issue.id}`,
+          category: "Development",
+          description: `${issue.key || "Jira"} - ${issue.summary}`,
+          ref: issue.key || "N/A",
+          source,
+          timeSeconds,
+          time: formatDuration(timeSeconds),
+          link: jiraSiteUrl && issue.key ? `${jiraSiteUrl}/browse/${issue.key}` : issue.self,
+          occurredAt: issue.updated,
+          relatedData: {
+            issueKey: issue.key,
+            projectKey: issue.projectKey,
+            projectName: issue.projectName,
+            issueType: issue.issueType,
+            status: issue.status,
+            assignee: issue.assignee,
+            parentKey: issue.parentKey,
+            labels: issue.labels,
+            linkedIssueKeys: issue.linkedIssueKeys,
+            createdAt: issue.created,
+            updatedAt: issue.updated,
+            repositoryFullName: null,
+            repositorySlug: null,
+            workspace: null,
+            commitHash: null,
+            commitMessage: null,
+            commitTimestamp: null,
+            pullRequestId: null,
+            pullRequestTitle: null,
+            pullRequestState: null,
+            pullRequestUrl: null,
+            pullRequestTimestamp: null,
+            sourceBranch: null,
+            destinationBranch: null,
+            branch: null,
+          },
+        });
+      }
+    } catch (error) {
+      logger.warn(
+        { err: error, cloudId, jiraSiteUrl },
+        "Failed to fetch Jira entries for one Atlassian resource",
+      );
+    }
+  }
+
+  return entries;
 }
 
 async function fetchBitbucketEntries(

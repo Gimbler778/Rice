@@ -68,6 +68,7 @@ export interface CrossCheckPrompt {
   id: string;
   message: string;
   suggestedCategory: EntryCategory;
+  source: "jira" | "bitbucket";
 }
 
 // Category display helpers

@@ -9,7 +9,7 @@
 //   PUT  /api/learning/:date           → upsert learning of the day
 //   POST /api/timesheets/copy-yesterday → copy yesterday's entries
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, format, startOfWeek } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
@@ -544,12 +544,19 @@ function SuggestionsPanel({
   onDismissSuggestion,
   onDismissCrossCheck,
 }: SuggestionsPanelProps) {
+  const jiraSectionRef = useRef<HTMLDivElement | null>(null);
+  const bitbucketSectionRef = useRef<HTMLDivElement | null>(null);
   const jiraSuggestions = suggestions.filter((s) => s.source === "jira");
   const bbSuggestions = suggestions.filter((s) => s.source === "bitbucket");
   const newCount = suggestions.length + crossChecks.length;
 
+  const scrollToSection = (source: Suggestion["source"]) => {
+    const targetRef = source === "jira" ? jiraSectionRef : bitbucketSectionRef;
+    targetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex max-h-[calc(100vh-12rem)] flex-col gap-3 overflow-y-auto pr-1">
       {/* Panel header */}
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-foreground">Suggestions</span>
@@ -574,13 +581,14 @@ function SuggestionsPanel({
           </div>
           <div className="flex gap-1.5">
             <button
-              // TODO: POST /api/timesheets/entries with suggestedCategory
+              type="button"
               className="text-[11px] px-2.5 py-1 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200 font-medium hover:bg-teal-200 dark:hover:bg-teal-800 transition-colors"
-              onClick={() => {}}
+              onClick={() => scrollToSection(cc.source)}
             >
-              Add entry
+              Go to {cc.source === "jira" ? "Jira" : "Bitbucket"}
             </button>
             <button
+              type="button"
               className="text-[11px] px-2.5 py-1 rounded-full border border-border text-muted-foreground hover:bg-muted transition-colors"
               onClick={() => onDismissCrossCheck(cc.id)}
             >
@@ -593,7 +601,7 @@ function SuggestionsPanel({
       {/* JIRA suggestions */}
       {jiraSuggestions.length > 0 && (
         <>
-          <div className="flex items-center gap-1.5 mt-1">
+          <div ref={jiraSectionRef} className="flex items-center gap-1.5 mt-1 scroll-mt-2">
             <Clock className="size-3 text-muted-foreground" />
             <span className="text-[11px] font-medium text-muted-foreground">From JIRA</span>
           </div>
@@ -612,7 +620,7 @@ function SuggestionsPanel({
       {/* Bitbucket suggestions */}
       {bbSuggestions.length > 0 && (
         <>
-          <div className="flex items-center gap-1.5 mt-1">
+          <div ref={bitbucketSectionRef} className="flex items-center gap-1.5 mt-1 scroll-mt-2">
             <GitPullRequest className="size-3 text-muted-foreground" />
             <span className="text-[11px] font-medium text-muted-foreground">From Bitbucket</span>
           </div>
@@ -893,6 +901,7 @@ export function TodayPage() {
         id: "bitbucket-code-review",
         message: "Bitbucket activity detected, but no Code Review entry is logged yet.",
         suggestedCategory: "code_review",
+        source: "bitbucket",
       });
     }
 
@@ -904,6 +913,7 @@ export function TodayPage() {
         id: "jira-development",
         message: "Jira issue updates detected, but no Development entry is logged yet.",
         suggestedCategory: "development",
+        source: "jira",
       });
     }
 
@@ -1183,7 +1193,7 @@ export function TodayPage() {
           </div>
 
           {/* Right column — suggestions panel */}
-          <div className="w-56 shrink-0 xl:w-64">
+          <div className="sticky top-4 w-56 shrink-0 xl:w-64">
             <SuggestionsPanel
               suggestions={suggestions}
               crossChecks={crossChecks}
