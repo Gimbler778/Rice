@@ -1,21 +1,23 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BarChart3,
-  ChevronDown,
-  Circle,
-  Download,
-  PieChart,
-  TrendingUp,
-  Wallet,
-} from "lucide-react";
+import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { fetchTimesheetEntries } from "@/api/timesheets-api";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
-import { CATEGORY_LABELS, type EntryCategory, type TimesheetEntry } from "@/types/timesheet";
+import {
+  CATEGORY_LABELS,
+  type EntryCategory,
+  type TimesheetEntry,
+} from "@/types/timesheet";
 import {
   addDays,
   eachDayOfInterval,
@@ -58,21 +60,21 @@ const CATEGORY_ORDER: EntryCategory[] = [
 ];
 
 const CATEGORY_COLORS: Record<EntryCategory, string> = {
-  development: "#0f766e",
-  code_review: "#8b5cf6",
-  testing: "#2563eb",
-  documentation: "#d97706",
-  meetings: "#52525b",
-  admin: "#71717a",
-  org_sessions: "#db2777",
-  events: "#ea580c",
-  support: "#dc2626",
-  learning: "#16a34a",
-  manual_other: "#64748b",
+  development: "var(--chart-1)",
+  code_review: "var(--chart-4)",
+  testing: "var(--chart-2)",
+  documentation: "var(--chart-3)",
+  meetings: "var(--muted-foreground)",
+  admin: "var(--muted-foreground)",
+  org_sessions: "var(--secondary)",
+  events: "var(--chart-5)",
+  support: "var(--destructive)",
+  learning: "var(--primary)",
+  manual_other: "var(--muted-foreground)",
 };
 
-const PLANNED_COLOR = "#0f766e";
-const DEV_COLOR = "#0f766e";
+const PRIMARY_COLOR = "var(--primary)";
+const TESTING_COLOR = "var(--chart-2)";
 
 function toIsoDate(date: Date): string {
   return format(date, "yyyy-MM-dd");
@@ -210,12 +212,28 @@ function PieDonutChart({ summary }: { summary: CategoryAggregate[] }) {
   const circumference = 2 * Math.PI * radius;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
+    <div className="grid gap-6 lg:grid-cols-[220px_1fr] lg:items-center">
       <div className="flex items-center justify-center">
-        <svg viewBox="0 0 220 220" className="size-[220px]">
-          <circle cx="110" cy="110" r={radius} fill="none" stroke="currentColor" strokeOpacity="0.08" strokeWidth="30" />
+        <svg viewBox="0 0 220 220" className="size-[200px]">
+          <circle
+            cx="110"
+            cy="110"
+            r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeOpacity="0.08"
+            strokeWidth="28"
+          />
           {segments.length === 0 ? (
-            <circle cx="110" cy="110" r={radius} fill="none" stroke={PLANNED_COLOR} strokeWidth="30" strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={0} />
+            <circle
+              cx="110"
+              cy="110"
+              r={radius}
+              fill="none"
+              stroke={PRIMARY_COLOR}
+              strokeOpacity="0.2"
+              strokeWidth="28"
+            />
           ) : (
             segments.map((segment) => {
               const dashLength = segment.size * circumference;
@@ -228,86 +246,130 @@ function PieDonutChart({ summary }: { summary: CategoryAggregate[] }) {
                   r={radius}
                   fill="none"
                   stroke={CATEGORY_COLORS[segment.category]}
-                  strokeWidth="30"
+                  strokeWidth="28"
                   strokeDasharray={`${dashLength} ${circumference - dashLength}`}
                   strokeDashoffset={offset}
-                  strokeLinecap="round"
+                  strokeLinecap="butt"
                   transform="rotate(-90 110 110)"
                 />
               );
             })
           )}
-          <circle cx="110" cy="110" r="49" fill="hsl(var(--card))" />
-          <text x="110" y="103" textAnchor="middle" className="fill-foreground text-[18px] font-semibold">
+          <text
+            x="110"
+            y="105"
+            textAnchor="middle"
+            className="fill-foreground text-[20px] font-semibold"
+          >
             {formatHours(total)}
           </text>
-          <text x="110" y="124" textAnchor="middle" className="fill-muted-foreground text-[10px] uppercase tracking-[0.2em]">
+          <text
+            x="110"
+            y="125"
+            textAnchor="middle"
+            className="fill-muted-foreground text-[10px] uppercase tracking-[0.2em]"
+          >
             logged
           </text>
         </svg>
       </div>
-      <div className="space-y-3">
-        <div className="grid gap-2 sm:grid-cols-2">
-          {segments.map((segment) => (
-            <div key={segment.category} className="flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2">
-              <span className="size-3 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[segment.category] }} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{getCategoryLabel(segment.category)}</p>
-                <p className="text-xs text-muted-foreground">
-                  {formatHours(segment.hours)} · {Math.round(segment.size * 100)}%
-                </p>
-              </div>
+      <div className="space-y-1">
+        {segments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No entries in this period yet.
+          </p>
+        ) : (
+          segments.map((segment) => (
+            <div
+              key={segment.category}
+              className="flex items-center gap-3 rounded-md px-2 py-1.5"
+            >
+              <span
+                className="size-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: CATEGORY_COLORS[segment.category] }}
+              />
+              <p className="flex-1 truncate text-sm">
+                {getCategoryLabel(segment.category)}
+              </p>
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {formatHours(segment.hours)}
+              </p>
+              <p className="w-10 text-right text-xs tabular-nums text-muted-foreground">
+                {Math.round(segment.size * 100)}%
+              </p>
             </div>
-          ))}
-          {segments.length === 0 && (
-            <p className="text-sm text-muted-foreground">No entries in this period yet.</p>
-          )}
-        </div>
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function StackedWorkBar({ plannedHours, unplannedHours }: { plannedHours: number; unplannedHours: number; }) {
+function StackedWorkBar({
+  plannedHours,
+  unplannedHours,
+}: {
+  plannedHours: number;
+  unplannedHours: number;
+}) {
   const total = plannedHours + unplannedHours;
   const plannedPct = total === 0 ? 0 : (plannedHours / total) * 100;
   const unplannedPct = total === 0 ? 0 : (unplannedHours / total) * 100;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">Planned vs unplanned</span>
-        <span className="font-medium">{formatHours(total)}</span>
+    <div className="space-y-5">
+      <div className="flex items-baseline justify-between">
+        <span className="text-3xl font-semibold tracking-tight">
+          {formatHours(total)}
+        </span>
+        <span className="text-xs text-muted-foreground">total logged</span>
       </div>
-      <div className="h-6 overflow-hidden rounded-full bg-muted">
-        <div className="flex h-full w-full">
-          <div className="h-full bg-teal-600" style={{ width: `${plannedPct}%` }} />
-          <div className="h-full bg-slate-400" style={{ width: `${unplannedPct}%` }} />
-        </div>
+      <div className="flex h-2 overflow-hidden rounded-full bg-muted">
+        <div className="h-full bg-primary" style={{ width: `${plannedPct}%` }} />
+        <div
+          className="h-full bg-muted-foreground/40"
+          style={{ width: `${unplannedPct}%` }}
+        />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2">
-          <Circle className="size-3 fill-teal-600 text-teal-600" />
-          <div>
+        <div className="flex items-center gap-3">
+          <span className="size-2.5 shrink-0 rounded-full bg-primary" />
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">Planned</p>
-            <p className="text-xs text-muted-foreground">Work tied to a Jira issue</p>
+            <p className="text-xs text-muted-foreground">
+              Tied to a Jira issue
+            </p>
           </div>
-          <span className="ml-auto text-sm font-semibold">{formatHours(plannedHours)}</span>
+          <span className="text-sm font-semibold tabular-nums">
+            {formatHours(plannedHours)}
+          </span>
         </div>
-        <div className="flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2">
-          <Circle className="size-3 fill-slate-400 text-slate-400" />
-          <div>
+        <div className="flex items-center gap-3">
+          <span className="size-2.5 shrink-0 rounded-full bg-muted-foreground/40" />
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">Unplanned</p>
-            <p className="text-xs text-muted-foreground">Ad hoc or overhead work</p>
+            <p className="text-xs text-muted-foreground">
+              Ad hoc or overhead work
+            </p>
           </div>
-          <span className="ml-auto text-sm font-semibold">{formatHours(unplannedHours)}</span>
+          <span className="text-sm font-semibold tabular-nums">
+            {formatHours(unplannedHours)}
+          </span>
         </div>
       </div>
     </div>
   );
 }
 
-function AreaTrendChart({ entries, from, to }: { entries: TimesheetEntry[]; from: string; to: string; }) {
+function AreaTrendChart({
+  entries,
+  from,
+  to,
+}: {
+  entries: TimesheetEntry[];
+  from: string;
+  to: string;
+}) {
   const days = eachDayOfInterval({
     start: new Date(`${from}T12:00:00`),
     end: new Date(`${to}T12:00:00`),
@@ -316,7 +378,11 @@ function AreaTrendChart({ entries, from, to }: { entries: TimesheetEntry[]; from
   const points = days.map((day, index) => {
     const dayKey = toIsoDate(day);
     const total = entries
-      .filter((entry) => entry.date === dayKey && ["development", "testing"].includes(entry.category))
+      .filter(
+        (entry) =>
+          entry.date === dayKey &&
+          ["development", "testing"].includes(entry.category),
+      )
       .reduce((sum, entry) => sum + entry.hours, 0);
 
     return {
@@ -342,98 +408,138 @@ function AreaTrendChart({ entries, from, to }: { entries: TimesheetEntry[]; from
   const areaPoints = `0,${chartHeight} ${svgPoints} ${chartWidth},${chartHeight}`;
 
   return (
-    <div className="space-y-4">
-      <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
-        <svg viewBox={`0 0 ${chartWidth} ${chartHeight + 20}`} className="h-64 w-full">
-          {[0.25, 0.5, 0.75, 1].map((tick) => (
-            <line
-              key={tick}
-              x1="0"
-              x2={chartWidth}
-              y1={chartHeight - tick * chartHeight}
-              y2={chartHeight - tick * chartHeight}
-              stroke="currentColor"
-              strokeOpacity="0.08"
-            />
-          ))}
-          {points.map((point, index) => {
-            const x = (point.x / 100) * chartWidth;
-            const y = chartHeight - (point.total / maxValue) * chartHeight;
-            return (
-              <g key={`${point.label}-${index}`}>
-                <line x1={x} x2={x} y1={chartHeight} y2={y} stroke="currentColor" strokeOpacity="0.06" />
-                <circle cx={x} cy={y} r="4" fill={DEV_COLOR} />
-                <text x={x} y={chartHeight + 14} textAnchor="middle" className="fill-muted-foreground text-[10px]">
-                  {point.label}
-                </text>
-              </g>
-            );
-          })}
-          <polygon points={areaPoints} fill={DEV_COLOR} fillOpacity="0.18" />
-          <polyline points={svgPoints} fill="none" stroke={DEV_COLOR} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-        </svg>
-      </div>
-      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-        <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full bg-teal-600" /> Development</span>
-        <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full bg-blue-600" /> Testing</span>
-        <span className="text-xs">Daily development + testing hours</span>
+    <div className="space-y-3">
+      <svg
+        viewBox={`0 0 ${chartWidth} ${chartHeight + 20}`}
+        className="h-56 w-full"
+      >
+        {[0.25, 0.5, 0.75, 1].map((tick) => (
+          <line
+            key={tick}
+            x1="0"
+            x2={chartWidth}
+            y1={chartHeight - tick * chartHeight}
+            y2={chartHeight - tick * chartHeight}
+            stroke="currentColor"
+            strokeOpacity="0.08"
+          />
+        ))}
+        {points.map((point, index) => {
+          const x = (point.x / 100) * chartWidth;
+          const y = chartHeight - (point.total / maxValue) * chartHeight;
+          return (
+            <g key={`${point.label}-${index}`}>
+              <circle cx={x} cy={y} r="3" fill={PRIMARY_COLOR} />
+              <text
+                x={x}
+                y={chartHeight + 14}
+                textAnchor="middle"
+                className="fill-muted-foreground text-[10px]"
+              >
+                {point.label}
+              </text>
+            </g>
+          );
+        })}
+        <polygon points={areaPoints} fill={PRIMARY_COLOR} fillOpacity="0.12" />
+        <polyline
+          points={svgPoints}
+          fill="none"
+          stroke={PRIMARY_COLOR}
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-2">
+          <span
+            className="size-2 rounded-full"
+            style={{ backgroundColor: PRIMARY_COLOR }}
+          />
+          Development
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span
+            className="size-2 rounded-full"
+            style={{ backgroundColor: TESTING_COLOR }}
+          />
+          Testing
+        </span>
       </div>
     </div>
   );
 }
 
-function WeeklyStackedDistribution({ entries, from, to }: { entries: TimesheetEntry[]; from: string; to: string; }) {
+function WeeklyStackedDistribution({
+  entries,
+  from,
+  to,
+}: {
+  entries: TimesheetEntry[];
+  from: string;
+  to: string;
+}) {
   const weeks = aggregateWeeklyCategoryHours(entries, from, to);
   const maxHours = Math.max(1, ...weeks.map((week) => week.totalHours));
 
-  return (
-    <div className="space-y-4">
-      {weeks.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No weekly data yet for this period.</p>
-      ) : (
-        <div className="space-y-4">
-          {weeks.map((week) => {
-            const visibleCategories = CATEGORY_ORDER
-              .map((category) => ({ category, hours: week.categoryHours[category] ?? 0 }))
-              .filter((item) => item.hours > 0);
+  if (weeks.length === 0) {
+    return (
+      <p className="rounded-md bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+        No weekly data yet for this period.
+      </p>
+    );
+  }
 
-            return (
-              <div key={week.weekStart} className="space-y-2 rounded-xl border border-border/60 p-3">
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <div>
-                    <p className="font-medium">{week.label}</p>
-                    <p className="text-xs text-muted-foreground">{formatHours(week.totalHours)} total</p>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Week of {format(new Date(`${week.weekStart}T12:00:00`), "d MMM")}</p>
-                </div>
-                <div className="h-4 overflow-hidden rounded-full bg-muted">
-                  <div className="flex h-full w-full">
-                    {visibleCategories.map((segment) => (
-                      <div
-                        key={segment.category}
-                        className="h-full"
-                        style={{
-                          width: `${(segment.hours / maxHours) * 100}%`,
-                          backgroundColor: CATEGORY_COLORS[segment.category],
-                        }}
-                        title={`${getCategoryLabel(segment.category)}: ${formatHours(segment.hours)}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  {visibleCategories.map((segment) => (
-                    <span key={segment.category} className="inline-flex items-center gap-1.5 rounded-full border border-border/60 px-2 py-1">
-                      <span className="size-2 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[segment.category] }} />
-                      {getCategoryLabel(segment.category)} · {formatHours(segment.hours)}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+  return (
+    <div className="space-y-5">
+      {weeks.map((week) => {
+        const visibleCategories = CATEGORY_ORDER.map((category) => ({
+          category,
+          hours: week.categoryHours[category] ?? 0,
+        })).filter((item) => item.hours > 0);
+
+        return (
+          <div key={week.weekStart} className="space-y-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-sm font-medium">{week.label}</p>
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {formatHours(week.totalHours)}
+              </p>
+            </div>
+            <div className="flex h-2 overflow-hidden rounded-full bg-muted">
+              {visibleCategories.map((segment) => (
+                <div
+                  key={segment.category}
+                  className="h-full"
+                  style={{
+                    width: `${(segment.hours / maxHours) * 100}%`,
+                    backgroundColor: CATEGORY_COLORS[segment.category],
+                  }}
+                  title={`${getCategoryLabel(segment.category)}: ${formatHours(segment.hours)}`}
+                />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              {visibleCategories.map((segment) => (
+                <span
+                  key={segment.category}
+                  className="inline-flex items-center gap-1.5"
+                >
+                  <span
+                    className="size-2 rounded-full"
+                    style={{
+                      backgroundColor: CATEGORY_COLORS[segment.category],
+                    }}
+                  />
+                  {getCategoryLabel(segment.category)} ·{" "}
+                  {formatHours(segment.hours)}
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -461,8 +567,6 @@ function ReportsContent({ scope = "individual" }: { scope?: ReportsScope }) {
     [entries],
   );
   const unplannedHours = totalHours - plannedHours;
-
-  const periodLabel = period.charAt(0).toUpperCase() + period.slice(1);
 
   const handleExportCsv = () => {
     const categoryRows = summary.map((item) => {
@@ -500,107 +604,78 @@ function ReportsContent({ scope = "individual" }: { scope?: ReportsScope }) {
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-8 sm:px-6 lg:px-8">
-      <div className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-background via-background to-teal-50/60 p-6 shadow-sm dark:to-teal-950/20">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(15,118,110,0.12),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(37,99,235,0.08),transparent_30%)]" />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
-              <BarChart3 className="size-3.5" />
-              Reports
-            </div>
-            <h1 className="text-3xl font-semibold tracking-tight">Reports dashboard</h1>
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              {scope === "team"
-                ? "Team-wide reporting view. The current backend still serves the signed-in user's timesheet data, so this page uses the same aggregation model for now."
-                : "Track category mix, planned vs unplanned work, and daily effort across the selected period."}
-            </p>
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">
-              {range.label}
-            </p>
-          </div>
+    <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6 overflow-y-auto p-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {scope === "team" ? "Team reports" : "Reports"}
+          </h1>
+          <p className="text-sm text-muted-foreground">{range.label}</p>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/60 bg-background/80 p-2 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center rounded-md bg-muted/60 p-0.5">
             {PERIODS.map((item) => (
-              <Button
+              <button
                 key={item}
                 type="button"
-                size="sm"
-                variant={period === item ? "default" : "ghost"}
                 onClick={() => setPeriod(item)}
-                className={cn("capitalize", period === item && "bg-teal-600 text-white hover:bg-teal-700")}
+                className={cn(
+                  "rounded-sm px-3 py-1 text-xs font-medium capitalize transition-colors",
+                  period === item
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 {item}
-              </Button>
+              </button>
             ))}
-            <Button type="button" size="sm" variant="outline" onClick={handleExportCsv}>
-              <Download className="mr-1.5 size-4" />
-              Export CSV
-            </Button>
           </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={handleExportCsv}
+          >
+            <Download className="mr-1.5 size-4" />
+            Export CSV
+          </Button>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader className="flex-row items-center justify-between border-b border-border/60">
-            <div>
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total hours logged</CardTitle>
-              <CardDescription>Across the selected period</CardDescription>
-            </div>
-            <Wallet className="size-5 text-teal-600" />
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="text-3xl font-semibold tracking-tight">{formatHours(totalHours)}</div>
-            <p className="mt-1 text-sm text-muted-foreground">{entries.length} entries logged</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader className="flex-row items-center justify-between border-b border-border/60">
-            <div>
-              <CardTitle className="text-sm font-medium text-muted-foreground">Completeness</CardTitle>
-              <CardDescription>Logged vs expected workdays</CardDescription>
-            </div>
-            <TrendingUp className="size-5 text-blue-600" />
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="text-3xl font-semibold tracking-tight">{Math.round(completeness)}%</div>
-            <p className="mt-1 text-sm text-muted-foreground">{formatHours(totalHours)} of {formatHours(targetHours)}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader className="flex-row items-center justify-between border-b border-border/60">
-            <div>
-              <CardTitle className="text-sm font-medium text-muted-foreground">Planned work</CardTitle>
-              <CardDescription>Entries tied to Jira issues</CardDescription>
-            </div>
-            <PieChart className="size-5 text-purple-600" />
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="text-3xl font-semibold tracking-tight">{formatHours(plannedHours)}</div>
-            <p className="mt-1 text-sm text-muted-foreground">{totalHours === 0 ? 0 : Math.round((plannedHours / totalHours) * 100)}% of total</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader className="flex-row items-center justify-between border-b border-border/60">
-            <div>
-              <CardTitle className="text-sm font-medium text-muted-foreground">Unplanned work</CardTitle>
-              <CardDescription>Ad hoc work and overhead</CardDescription>
-            </div>
-            <ChevronDown className="size-5 text-slate-600" />
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="text-3xl font-semibold tracking-tight">{formatHours(unplannedHours)}</div>
-            <p className="mt-1 text-sm text-muted-foreground">Period: {periodLabel.toLowerCase()}</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          label="Total hours"
+          value={formatHours(totalHours)}
+          sub={`${entries.length} ${entries.length === 1 ? "entry" : "entries"}`}
+        />
+        <StatCard
+          label="Completeness"
+          value={`${Math.round(completeness)}%`}
+          sub={`${formatHours(totalHours)} of ${formatHours(targetHours)}`}
+        />
+        <StatCard
+          label="Planned"
+          value={formatHours(plannedHours)}
+          sub={
+            totalHours === 0
+              ? "0% of total"
+              : `${Math.round((plannedHours / totalHours) * 100)}% of total`
+          }
+        />
+        <StatCard
+          label="Unplanned"
+          value={formatHours(unplannedHours)}
+          sub={
+            totalHours === 0
+              ? "0% of total"
+              : `${Math.round((unplannedHours / totalHours) * 100)}% of total`
+          }
+        />
       </div>
 
       {isLoading ? (
-        <Card className="border-border/70 shadow-sm">
+        <Card className="border-border/60 shadow-sm">
           <CardContent className="grid min-h-[220px] place-items-center py-10">
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <Spinner />
@@ -610,54 +685,95 @@ function ReportsContent({ scope = "individual" }: { scope?: ReportsScope }) {
         </Card>
       ) : isError ? (
         <Card className="border-destructive/30 shadow-sm">
-          <CardContent className="py-10 text-sm text-destructive">
+          <CardContent className="py-10 text-center text-sm text-destructive">
             Could not load the report data. Please refresh and try again.
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="border-border/70 shadow-sm">
-            <CardHeader className="border-b border-border/60">
-              <CardTitle>Category distribution</CardTitle>
-              
+          <Card className="border-border/60 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Category distribution</CardTitle>
+              <CardDescription>Hours logged by category</CardDescription>
             </CardHeader>
-            <CardContent className="pt-5">
+            <CardContent>
               <PieDonutChart summary={summary} />
             </CardContent>
           </Card>
 
-          <Card className="border-border/70 shadow-sm">
-            <CardHeader className="border-b border-border/60">
-              <CardTitle>Planned vs unplanned</CardTitle>
-              
+          <Card className="border-border/60 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Planned vs unplanned</CardTitle>
+              <CardDescription>Jira-tied work compared to ad hoc</CardDescription>
             </CardHeader>
-            <CardContent className="pt-5">
-              <StackedWorkBar plannedHours={plannedHours} unplannedHours={unplannedHours} />
+            <CardContent>
+              <StackedWorkBar
+                plannedHours={plannedHours}
+                unplannedHours={unplannedHours}
+              />
             </CardContent>
           </Card>
 
-          <Card className="border-border/70 shadow-sm lg:col-span-2">
-            <CardHeader className="border-b border-border/60">
-              <CardTitle>Development + testing trend</CardTitle>
-              <CardDescription>Area chart of daily development and testing time</CardDescription>
+          <Card className="border-border/60 shadow-sm lg:col-span-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                Development + testing trend
+              </CardTitle>
+              <CardDescription>
+                Daily development and testing hours across the period
+              </CardDescription>
             </CardHeader>
-            <CardContent className="pt-5">
-              <AreaTrendChart entries={entries} from={range.from} to={range.to} />
+            <CardContent>
+              <AreaTrendChart
+                entries={entries}
+                from={range.from}
+                to={range.to}
+              />
             </CardContent>
           </Card>
 
-          <Card className="border-border/70 shadow-sm lg:col-span-2">
-            <CardHeader className="border-b border-border/60">
-              <CardTitle>Weekly category mix</CardTitle>
-              <CardDescription>Stacked bars show how categories are distributed week by week</CardDescription>
+          <Card className="border-border/60 shadow-sm lg:col-span-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Weekly category mix</CardTitle>
+              <CardDescription>
+                How categories are distributed week by week
+              </CardDescription>
             </CardHeader>
-            <CardContent className="pt-5">
-              <WeeklyStackedDistribution entries={entries} from={range.from} to={range.to} />
+            <CardContent>
+              <WeeklyStackedDistribution
+                entries={entries}
+                from={range.from}
+                to={range.to}
+              />
             </CardContent>
           </Card>
         </div>
       )}
     </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+}) {
+  return (
+    <Card className="border-border/60 shadow-sm">
+      <CardContent className="space-y-1 py-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <p className="text-2xl font-semibold tracking-tight tabular-nums">
+          {value}
+        </p>
+        <p className="text-xs text-muted-foreground">{sub}</p>
+      </CardContent>
+    </Card>
   );
 }
 
