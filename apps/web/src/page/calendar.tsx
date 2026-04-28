@@ -11,7 +11,6 @@ import {
   subWeeks,
 } from "date-fns";
 import {
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -19,7 +18,6 @@ import {
   PencilLine,
   Plus,
   Save,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -34,7 +32,13 @@ import {
   type TimesheetEntryUpdateInput,
 } from "@/api/timesheets-api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -62,8 +66,12 @@ import {
   type EntryCategory,
   type TimesheetEntry,
 } from "@/types/timesheet";
-import { getLocalIsoDateFromTimestamp, mapIntegrationCategory } from "@/lib/integration-timesheet";
+import {
+  getLocalIsoDateFromTimestamp,
+  mapIntegrationCategory,
+} from "@/lib/integration-timesheet";
 import type { IntegrationTimesheetEntry } from "@/types/integrations";
+import { Slider } from "@/components/ui/slider";
 
 const START_HOUR = 7;
 const END_HOUR = 23;
@@ -97,18 +105,18 @@ const ZOOM_PRESETS = [
   { intervalMinutes: 10, hourHeight: 104 },
 ] as const;
 
-const ENTRY_COLORS: Partial<Record<EntryCategory, { bg: string; border: string; text: string }>> = {
-  development: { bg: "bg-teal-50 dark:bg-teal-950/40", border: "border-l-teal-500", text: "text-teal-800 dark:text-teal-200" },
-  code_review: { bg: "bg-purple-50 dark:bg-purple-950/40", border: "border-l-purple-500", text: "text-purple-800 dark:text-purple-200" },
-  testing: { bg: "bg-blue-50 dark:bg-blue-950/40", border: "border-l-blue-400", text: "text-blue-800 dark:text-blue-200" },
-  documentation: { bg: "bg-amber-50 dark:bg-amber-950/40", border: "border-l-amber-400", text: "text-amber-800 dark:text-amber-200" },
-  meetings: { bg: "bg-zinc-100 dark:bg-zinc-800/60", border: "border-l-zinc-400", text: "text-zinc-700 dark:text-zinc-300" },
-  admin: { bg: "bg-zinc-100 dark:bg-zinc-800/60", border: "border-l-zinc-500", text: "text-zinc-700 dark:text-zinc-300" },
-  support: { bg: "bg-red-50 dark:bg-red-950/40", border: "border-l-red-400", text: "text-red-800 dark:text-red-200" },
-  learning: { bg: "bg-green-50 dark:bg-green-950/40", border: "border-l-green-400", text: "text-green-800 dark:text-green-200" },
-  org_sessions: { bg: "bg-pink-50 dark:bg-pink-950/40", border: "border-l-pink-400", text: "text-pink-800 dark:text-pink-200" },
-  events: { bg: "bg-orange-50 dark:bg-orange-950/40", border: "border-l-orange-400", text: "text-orange-800 dark:text-orange-200" },
-  manual_other: { bg: "bg-zinc-50 dark:bg-zinc-900/40", border: "border-l-zinc-300", text: "text-zinc-600 dark:text-zinc-400" },
+const ENTRY_COLORS: Partial<Record<EntryCategory, { bg: string; hover: string }>> = {
+  development: { bg: "bg-chart-1/15", hover: "hover:bg-chart-1/25" },
+  code_review: { bg: "bg-chart-4/15", hover: "hover:bg-chart-4/25" },
+  testing: { bg: "bg-chart-2/15", hover: "hover:bg-chart-2/25" },
+  documentation: { bg: "bg-chart-3/15", hover: "hover:bg-chart-3/25" },
+  meetings: { bg: "bg-muted", hover: "hover:bg-muted/80" },
+  admin: { bg: "bg-muted", hover: "hover:bg-muted/80" },
+  support: { bg: "bg-destructive/15", hover: "hover:bg-destructive/25" },
+  learning: { bg: "bg-primary/15", hover: "hover:bg-primary/25" },
+  org_sessions: { bg: "bg-secondary/20", hover: "hover:bg-secondary/30" },
+  events: { bg: "bg-chart-5/15", hover: "hover:bg-chart-5/25" },
+  manual_other: { bg: "bg-muted/60", hover: "hover:bg-muted/80" },
 };
 
 type CalendarBlock = ReturnType<typeof mapIntegrationBlock>;
@@ -124,8 +132,17 @@ function formatHour(hour: number) {
   const hourValue = Math.floor(hour);
   const minuteValue = Math.round((hour - hourValue) * 60);
   const ampm = hourValue < 12 ? "AM" : "PM";
-  const displayHour = hourValue > 12 ? hourValue - 12 : hourValue === 0 ? 12 : hourValue;
+  const displayHour =
+    hourValue > 12 ? hourValue - 12 : hourValue === 0 ? 12 : hourValue;
   return `${displayHour}:${String(minuteValue).padStart(2, "0")} ${ampm}`;
+}
+
+function formatHourLabel(hour: number) {
+  const hourValue = Math.floor(hour);
+  const ampm = hourValue < 12 ? "AM" : "PM";
+  const displayHour =
+    hourValue > 12 ? hourValue - 12 : hourValue === 0 ? 12 : hourValue;
+  return `${displayHour} ${ampm}`;
 }
 
 function formatDuration(hours: number) {
@@ -175,8 +192,7 @@ function entryColor(category: EntryCategory) {
   return (
     ENTRY_COLORS[category] ?? {
       bg: "bg-muted",
-      border: "border-l-muted-foreground",
-      text: "text-foreground",
+      hover: "hover:bg-muted/80",
     }
   );
 }
@@ -264,7 +280,13 @@ function layoutTimelineBlocks(blocks: TimelineBlock[], hourHeight: number) {
   return positionedBlocks.map((block) => ({ ...block, laneCount }));
 }
 
-function TimelineBlockCard({ block, hourHeight }: { block: PositionedTimelineBlock; hourHeight: number }) {
+function TimelineBlockCard({
+  block,
+  hourHeight,
+}: {
+  block: PositionedTimelineBlock;
+  hourHeight: number;
+}) {
   const top = (block.startHour - START_HOUR) * hourHeight;
   const height = Math.max(block.durationHours * hourHeight, 40);
   const laneWidth = `calc((100% - ${(block.laneCount - 1) * 6}px) / ${block.laneCount})`;
@@ -277,23 +299,24 @@ function TimelineBlockCard({ block, hourHeight }: { block: PositionedTimelineBlo
       type={block.onClick ? "button" : undefined}
       onClick={block.onClick}
       className={cn(
-        "absolute rounded-md border-l-2 overflow-hidden select-none text-left",
-        "hover:brightness-95 dark:hover:brightness-110 transition-all",
+        "absolute rounded-md overflow-hidden select-none text-left transition-colors",
         color.bg,
-        color.border,
+        block.onClick && cn("cursor-pointer", color.hover),
       )}
       style={{ top, height, left, width: laneWidth }}
     >
-      <div className="flex h-full flex-col justify-between gap-1 px-2 py-1">
+      <div className="flex h-full flex-col justify-between gap-1 px-2.5 py-1.5">
         <div className="min-w-0">
-          <p className={cn("text-[11px] font-medium leading-tight line-clamp-2", color.text)}>{block.description}</p>
-          <p className={cn("text-[10px] leading-tight truncate opacity-70", color.text)}>
+          <p className="text-xs font-medium leading-tight line-clamp-2 text-foreground">
+            {block.description}
+          </p>
+          <p className="text-[11px] leading-tight truncate text-muted-foreground">
             {CATEGORY_LABELS[block.category]}
             {block.jiraIssueKey ? ` · ${block.jiraIssueKey}` : ""}
           </p>
         </div>
-        <p className={cn("text-[10px] font-mono opacity-60", color.text)}>
-          {formatHour(block.startHour)} - {formatHour(block.startHour + block.durationHours)}
+        <p className="text-[11px] font-mono text-muted-foreground">
+          {formatHour(block.startHour)} – {formatHour(block.startHour + block.durationHours)}
         </p>
       </div>
     </BlockTag>
@@ -310,9 +333,12 @@ function CurrentTimeIndicator({ hourHeight }: { hourHeight: number }) {
   }
 
   return (
-    <div className="absolute left-0 right-0 z-20 flex items-center pointer-events-none" style={{ top }}>
-      <div className="size-2 rounded-full bg-teal-500 -ml-1 shrink-0" />
-      <div className="h-px flex-1 bg-teal-500" />
+    <div
+      className="absolute left-0 right-0 z-20 flex items-center pointer-events-none"
+      style={{ top }}
+    >
+      <div className="size-2 rounded-full bg-primary/90 -ml-1 shrink-0" />
+      <div className="h-px flex-1 bg-primary/70" />
     </div>
   );
 }
@@ -341,62 +367,93 @@ function DayColumn({
   const isCurrentDay = isSameDay(date, new Date());
   const plannedTotal = entryHours(plannedEntries);
   const syncedTotal = syncedHours(syncedEntries);
-  const timeSlots = useMemo(() => buildTimeSlots(intervalMinutes), [intervalMinutes]);
+  const timeSlots = useMemo(
+    () => buildTimeSlots(intervalMinutes),
+    [intervalMinutes],
+  );
   const dayHeight = VISIBLE_HOURS * hourHeight;
   const timelineBlocks = useMemo(
     () =>
-      layoutTimelineBlocks([
-        ...plannedEntries.map((entry) => ({
-          id: entry.id,
-          startHour: entry.startHour ?? 9,
-          durationHours: entry.hours,
-          category: entry.category,
-          description: entry.description,
-          jiraIssueKey: entry.jiraIssueKey,
-          kind: "planned" as const,
-          onClick: () => onEditEntry(entry),
-        })),
-        ...syncedEntries.map((entry) => ({
-          id: entry.id,
-          startHour: entry.startHour,
-          durationHours: entry.durationHours,
-          category: entry.category,
-          description: entry.description,
-          jiraIssueKey: entry.jiraIssueKey,
-          kind: "synced" as const,
-        })),
-      ], hourHeight),
+      layoutTimelineBlocks(
+        [
+          ...plannedEntries.map((entry) => ({
+            id: entry.id,
+            startHour: entry.startHour ?? 9,
+            durationHours: entry.hours,
+            category: entry.category,
+            description: entry.description,
+            jiraIssueKey: entry.jiraIssueKey,
+            kind: "planned" as const,
+            onClick: () => onEditEntry(entry),
+          })),
+          ...syncedEntries.map((entry) => ({
+            id: entry.id,
+            startHour: entry.startHour,
+            durationHours: entry.durationHours,
+            category: entry.category,
+            description: entry.description,
+            jiraIssueKey: entry.jiraIssueKey,
+            kind: "synced" as const,
+          })),
+        ],
+        hourHeight,
+      ),
     [hourHeight, onEditEntry, plannedEntries, syncedEntries],
   );
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div
+      className={cn(
+        "flex min-w-0 flex-1 flex-col",
+        isCurrentDay && "bg-primary/5",
+        selected && !isCurrentDay && "bg-accent/40",
+      )}
+    >
       <button
         type="button"
         onClick={onSelect}
-        className={cn(
-          "sticky top-0 z-10 border-b border-r bg-background px-2 py-2 text-center transition-colors",
-          selected && "bg-teal-50/70 dark:bg-teal-950/20",
-          isCurrentDay && "ring-1 ring-teal-500/20",
-        )}
+        className="sticky top-0 z-10 flex h-20 flex-col items-center justify-center gap-0.5 bg-inherit transition-colors"
       >
-        <p className={cn("text-xs font-medium", isCurrentDay ? "text-teal-600 dark:text-teal-400" : "text-foreground")}>
-          {format(date, "EEE, MMM d")}
-        </p>
-        <p className="text-[11px] text-muted-foreground">
-          Planned {formatDuration(plannedTotal)} · Synced {formatDuration(syncedTotal)}
-        </p>
+        <div className="flex items-center gap-1.5">
+          {isCurrentDay && <span className="size-1.5 rounded-full bg-primary" />}
+          <span
+            className={cn(
+              "text-[11px] font-medium uppercase tracking-wider",
+              isCurrentDay ? "text-primary" : "text-muted-foreground",
+            )}
+          >
+            {format(date, "EEE")}
+          </span>
+        </div>
+        <span
+          className={cn(
+            "text-lg font-semibold leading-none",
+            isCurrentDay ? "text-primary" : "text-foreground",
+          )}
+        >
+          {format(date, "d")}
+        </span>
+        <span className="text-[11px] text-muted-foreground">
+          {formatDuration(plannedTotal + syncedTotal)}
+        </span>
       </button>
 
-      <div className={cn("relative border-r cursor-default", isCurrentDay && "bg-teal-50/20 dark:bg-teal-950/10")} style={{ height: dayHeight }}>
+      <div
+        className="relative cursor-default"
+        style={{ height: dayHeight }}
+      >
         {timeSlots.map((slot, index) => {
           const minuteValue = Math.round((slot - Math.floor(slot)) * 60);
           const isHourMark = minuteValue === 0;
 
+          if (!isHourMark) {
+            return null;
+          }
+
           return (
             <div
               key={`slot-${slot}-${index}`}
-              className={cn("absolute left-0 right-0", isHourMark ? "border-t border-border/40" : "border-t border-dashed border-border/20")}
+              className="absolute inset-x-0 h-px bg-border/40"
               style={{ top: (slot - START_HOUR) * hourHeight }}
             />
           );
@@ -405,12 +462,18 @@ function DayColumn({
           <button
             type="button"
             onClick={onAddEntry}
-            className="absolute inset-2 rounded border border-dashed border-border/60 text-[11px] text-muted-foreground hover:bg-muted/40 transition-colors flex items-center justify-center"
+            className="absolute inset-x-2 inset-y-3 rounded-md text-[11px] text-muted-foreground/70 hover:bg-muted/40 transition-colors flex items-start justify-center pt-3"
           >
-            Add planned work
+            + Add work
           </button>
         ) : (
-          timelineBlocks.map((block) => <TimelineBlockCard key={block.kind + block.id} block={block} hourHeight={hourHeight} />)
+          timelineBlocks.map((block) => (
+            <TimelineBlockCard
+              key={block.kind + block.id}
+              block={block}
+              hourHeight={hourHeight}
+            />
+          ))
         )}
         {isCurrentDay && <CurrentTimeIndicator hourHeight={hourHeight} />}
       </div>
@@ -432,7 +495,11 @@ function EntryDialog({
   date: string;
   presetHours: number;
   onOpenChange: (open: boolean) => void;
-  onSave: (payload: TimesheetEntryInput | { id: string; data: TimesheetEntryUpdateInput }) => Promise<void>;
+  onSave: (
+    payload:
+      | TimesheetEntryInput
+      | { id: string; data: TimesheetEntryUpdateInput },
+  ) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const [category, setCategory] = useState<EntryCategory>("development");
@@ -490,13 +557,18 @@ function EntryDialog({
         <DialogHeader>
           <DialogTitle>{entry ? "Edit activity" : "Add activity"}</DialogTitle>
           <DialogDescription>
-            {entry ? "Update the selected activity." : `Create a new manual activity for ${format(parseISO(date), "EEE, d MMM yyyy")}.`}
+            {entry
+              ? "Update the selected activity."
+              : `Create a new manual activity for ${format(parseISO(date), "EEE, d MMM yyyy")}.`}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           <div className="text-xs text-muted-foreground">
-            Day: <span className="font-medium text-foreground">{format(parseISO(date), "EEE, d MMM yyyy")}</span>
+            Day:{" "}
+            <span className="font-medium text-foreground">
+              {format(parseISO(date), "EEE, d MMM yyyy")}
+            </span>
           </div>
 
           <Textarea
@@ -506,7 +578,10 @@ function EntryDialog({
             className="min-h-24"
           />
 
-          <Select value={category} onValueChange={(value) => setCategory(value as EntryCategory)}>
+          <Select
+            value={category}
+            onValueChange={(value) => setCategory(value as EntryCategory)}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Category" />
             </SelectTrigger>
@@ -540,7 +615,10 @@ function EntryDialog({
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium">Start time</label>
-              <Select value={String(startHour)} onValueChange={(value) => setStartHour(Number(value))}>
+              <Select
+                value={String(startHour)}
+                onValueChange={(value) => setStartHour(Number(value))}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select time" />
                 </SelectTrigger>
@@ -574,7 +652,11 @@ function EntryDialog({
               Delete
             </Button>
           )}
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
             Cancel
           </Button>
           <Button type="button" onClick={handleSave}>
@@ -595,7 +677,10 @@ export function CalendarPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [zoomLevel, setZoomLevel] = useState(0);
 
-  const selectedDate = useMemo(() => parseSelectedDate(searchParams.get("date")), [searchParams]);
+  const selectedDate = useMemo(
+    () => parseSelectedDate(searchParams.get("date")),
+    [searchParams],
+  );
   const [weekStart, setWeekStart] = useState(() => getWeekStart(selectedDate));
   const [editorState, setEditorState] = useState<EditorState>({
     open: false,
@@ -613,9 +698,15 @@ export function CalendarPage() {
   }, [selectedDate]);
 
   const weekEnd = useMemo(() => getWeekEnd(weekStart), [weekStart]);
-  const weekDays = useMemo(() => eachDayOfInterval({ start: weekStart, end: weekEnd }), [weekStart, weekEnd]);
+  const weekDays = useMemo(
+    () => eachDayOfInterval({ start: weekStart, end: weekEnd }),
+    [weekStart, weekEnd],
+  );
   const { intervalMinutes, hourHeight } = ZOOM_PRESETS[zoomLevel];
-  const timeSlots = useMemo(() => buildTimeSlots(intervalMinutes), [intervalMinutes]);
+  const timeSlots = useMemo(
+    () => buildTimeSlots(intervalMinutes),
+    [intervalMinutes],
+  );
   const calendarHeight = VISIBLE_HOURS * hourHeight;
   const weekStartKey = toIsoDate(weekStart);
   const weekEndKey = toIsoDate(weekEnd);
@@ -623,13 +714,19 @@ export function CalendarPage() {
 
   const weekEntriesQuery = useQuery({
     queryKey: ["calendar-week", weekStartKey, weekEndKey],
-    queryFn: () => fetchTimesheetEntries({ from: weekStartKey, to: weekEndKey }),
+    queryFn: () =>
+      fetchTimesheetEntries({ from: weekStartKey, to: weekEndKey }),
     enabled: isAuthenticated,
   });
 
   const weekManualEntries = weekEntriesQuery.data?.entries ?? [];
   const weekSyncedEntries = useMemo(
-    () => (integrationTimesheetQuery.data?.entries ?? []).map(mapIntegrationBlock).filter((entry) => entry.date >= weekStartKey && entry.date <= weekEndKey),
+    () =>
+      (integrationTimesheetQuery.data?.entries ?? [])
+        .map(mapIntegrationBlock)
+        .filter(
+          (entry) => entry.date >= weekStartKey && entry.date <= weekEndKey,
+        ),
     [integrationTimesheetQuery.data?.entries, weekStartKey, weekEndKey],
   );
 
@@ -667,16 +764,26 @@ export function CalendarPage() {
   const createMutation = useMutation({
     mutationFn: createTimesheetEntry,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["calendar-week", weekStartKey, weekEndKey] });
+      await queryClient.invalidateQueries({
+        queryKey: ["calendar-week", weekStartKey, weekEndKey],
+      });
       toast.success("Activity added");
     },
     onError: () => toast.error("Could not add activity"),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: TimesheetEntryUpdateInput }) => updateTimesheetEntry(id, data),
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: TimesheetEntryUpdateInput;
+    }) => updateTimesheetEntry(id, data),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["calendar-week", weekStartKey, weekEndKey] });
+      await queryClient.invalidateQueries({
+        queryKey: ["calendar-week", weekStartKey, weekEndKey],
+      });
       toast.success("Activity updated");
     },
     onError: () => toast.error("Could not update activity"),
@@ -685,7 +792,9 @@ export function CalendarPage() {
   const deleteMutation = useMutation({
     mutationFn: deleteTimesheetEntry,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["calendar-week", weekStartKey, weekEndKey] });
+      await queryClient.invalidateQueries({
+        queryKey: ["calendar-week", weekStartKey, weekEndKey],
+      });
       toast.success("Activity deleted");
     },
     onError: () => toast.error("Could not delete activity"),
@@ -696,7 +805,12 @@ export function CalendarPage() {
   };
 
   const openEditDialog = (entry: TimesheetEntry) => {
-    setEditorState({ open: true, entry, date: entry.date, presetHours: entry.hours });
+    setEditorState({
+      open: true,
+      entry,
+      date: entry.date,
+      presetHours: entry.hours,
+    });
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("date", entry.date);
@@ -734,14 +848,6 @@ export function CalendarPage() {
     });
   };
 
-  const handleZoomIn = () => {
-    setZoomLevel((current) => Math.min(ZOOM_PRESETS.length - 1, current + 1));
-  };
-
-  const handleZoomOut = () => {
-    setZoomLevel((current) => Math.max(0, current - 1));
-  };
-
   const handleSelectDay = (date: Date) => {
     const dateKey = toIsoDate(date);
     setSearchParams((prev) => {
@@ -751,7 +857,11 @@ export function CalendarPage() {
     });
   };
 
-  const handleSave = async (payload: TimesheetEntryInput | { id: string; data: TimesheetEntryUpdateInput }) => {
+  const handleSave = async (
+    payload:
+      | TimesheetEntryInput
+      | { id: string; data: TimesheetEntryUpdateInput },
+  ) => {
     if ("id" in payload) {
       await updateMutation.mutateAsync({ id: payload.id, data: payload.data });
       return;
@@ -770,254 +880,255 @@ export function CalendarPage() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-5 overflow-hidden p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
-            <CalendarDays className="size-3.5" />
-            Calendar view
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tight">Weekly activity calendar</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Review Jira and Bitbucket activity time-wise across the week, then add or edit your manual planned work for any selected day.
-          </p>
+    <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {weekLabel}
+          </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/60 bg-background/80 p-2 shadow-sm backdrop-blur">
-          <Button variant="outline" size="sm" onClick={handlePreviousWeek}>
-            <ChevronLeft className="size-4" />
-          </Button>
-          <div className="min-w-40 px-2 text-center text-sm font-medium">{weekLabel}</div>
-          <Button variant="outline" size="sm" onClick={handleNextWeek}>
-            <ChevronRight className="size-4" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleThisWeek}>
-            This week
-          </Button>
-          <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/90 px-2 py-1">
-            <span className="text-[11px] text-muted-foreground">Zoom</span>
-            <Button variant="outline" size="sm" className="h-7 px-2" onClick={handleZoomOut}>
-              -
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center">
+            <Button variant="ghost" size="icon" onClick={handlePreviousWeek}>
+              <ChevronLeft className="size-4" />
             </Button>
-            <input
-              type="range"
+            <Button variant="ghost" size="sm" onClick={handleThisWeek}>
+              Today
+            </Button>
+            <Button variant="ghost" size="icon" onClick={handleNextWeek}>
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 px-2">
+            <span className="text-xs text-muted-foreground">Zoom</span>
+            <Slider
               min={0}
               max={ZOOM_PRESETS.length - 1}
               step={1}
-              value={zoomLevel}
-              onChange={(event) => setZoomLevel(Number(event.target.value))}
+              value={[zoomLevel]}
+              onValueChange={(value) => setZoomLevel(value[0])}
               className="h-7 w-24"
             />
-            <Button variant="outline" size="sm" className="h-7 px-2" onClick={handleZoomIn}>
-              +
-            </Button>
-            <span className="w-9 text-right text-[11px] font-medium text-muted-foreground">
-              {intervalMinutes === 60 ? "1h" : `${intervalMinutes}m`}
-            </span>
           </div>
-          <Button size="sm" onClick={() => openCreateDialog(selectedDateKey, 1)}>
+          <Button
+            size="sm"
+            onClick={() => openCreateDialog(selectedDateKey, 1)}
+          >
             <Plus className="mr-1.5 size-4" />
             Add activity
           </Button>
         </div>
       </div>
 
-      <div className="space-y-4">
-        <Card className="border-border/70 shadow-sm">
-          <CardHeader className="border-b border-border/60 pb-4">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="size-4 text-teal-600" />
-              Time-blocking calendar
-            </CardTitle>
-            <CardDescription>
-              Planned work appears in the top row. Jira and Bitbucket activity is placed by timestamp in the hourly grid below.
-            </CardDescription>
-          </CardHeader>
-
+      <div className="space-y-6">
+        <Card className="overflow-hidden border-border/60 shadow-sm">
           <CardContent className="p-0">
-            {integrationTimesheetQuery.isPending || weekEntriesQuery.isPending ? (
+            {integrationTimesheetQuery.isPending ||
+            weekEntriesQuery.isPending ? (
               <div className="grid min-h-[720px] place-items-center text-sm text-muted-foreground">
                 <Spinner />
               </div>
-            ) : integrationTimesheetQuery.isError || weekEntriesQuery.isError ? (
-              <div className="grid min-h-[720px] place-items-center rounded-xl border border-destructive/30 bg-destructive/5 text-sm text-destructive">
+            ) : integrationTimesheetQuery.isError ||
+              weekEntriesQuery.isError ? (
+              <div className="grid min-h-[720px] place-items-center bg-destructive/5 text-sm text-destructive">
                 Could not load calendar data.
               </div>
             ) : (
-              <div className="overflow-hidden">
-                <div className="flex w-full">
-                  <div className="sticky left-0 z-10 w-16 shrink-0 bg-background">
-                    <div className="h-[calc(2.5rem+1px)] border-b border-r" />
-                    <div className="flex h-14 items-center justify-end border-b border-r pr-2">
-                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Planned</span>
-                    </div>
-                    <div className="relative border-r" style={{ height: calendarHeight }}>
-                      {timeSlots
-                        .filter((slot) => slot <= END_HOUR)
-                        .map((slot, index) => (
-                          <span
-                            key={`label-${slot}-${index}`}
-                            className="absolute -top-2 right-1 text-[11px] font-mono tabular-nums text-muted-foreground"
-                            style={{ top: (slot - START_HOUR) * hourHeight }}
-                          >
-                            {formatHour(slot)}
-                          </span>
-                        ))}
-                    </div>
+              <div className="flex w-full">
+                <div className="sticky left-0 z-10 w-16 shrink-0 bg-background">
+                  <div className="h-20" />
+                  <div
+                    className="relative"
+                    style={{ height: calendarHeight }}
+                  >
+                    {timeSlots
+                      .filter((slot) => {
+                        const minuteValue = Math.round(
+                          (slot - Math.floor(slot)) * 60,
+                        );
+                        return (
+                          minuteValue === 0 &&
+                          slot > START_HOUR &&
+                          slot < END_HOUR
+                        );
+                      })
+                      .map((slot) => (
+                        <span
+                          key={`label-${slot}`}
+                          className="absolute right-3 -translate-y-1/2 bg-background px-1 text-[10px] font-medium tabular-nums text-muted-foreground"
+                          style={{ top: (slot - START_HOUR) * hourHeight }}
+                        >
+                          {formatHourLabel(slot)}
+                        </span>
+                      ))}
                   </div>
+                </div>
 
-                  <div className="flex min-w-0 flex-1">
-                    {weekDays.map((day) => {
-                      const dayKey = toIsoDate(day);
-                      const isSelected = isSameDay(day, selectedDate);
-                      const plannedEntries = manualEntriesByDate.get(dayKey) ?? [];
-                      const syncedEntries = syncedEntriesByDate.get(dayKey) ?? [];
+                <div className="flex min-w-0 flex-1 divide-x divide-border/40">
+                  {weekDays.map((day) => {
+                    const dayKey = toIsoDate(day);
+                    const isSelected = isSameDay(day, selectedDate);
+                    const plannedEntries =
+                      manualEntriesByDate.get(dayKey) ?? [];
+                    const syncedEntries =
+                      syncedEntriesByDate.get(dayKey) ?? [];
 
-                      return (
-                        <DayColumn
-                          key={dayKey}
-                          date={day}
-                          plannedEntries={plannedEntries}
-                          syncedEntries={syncedEntries}
-                          intervalMinutes={intervalMinutes}
-                          hourHeight={hourHeight}
-                          selected={isSelected}
-                          onSelect={() => handleSelectDay(day)}
-                          onEditEntry={openEditDialog}
-                          onAddEntry={() => openCreateDialog(dayKey, 1)}
-                        />
-                      );
-                    })}
-                  </div>
+                    return (
+                      <DayColumn
+                        key={dayKey}
+                        date={day}
+                        plannedEntries={plannedEntries}
+                        syncedEntries={syncedEntries}
+                        intervalMinutes={intervalMinutes}
+                        hourHeight={hourHeight}
+                        selected={isSelected}
+                        onSelect={() => handleSelectDay(day)}
+                        onEditEntry={openEditDialog}
+                        onAddEntry={() => openCreateDialog(dayKey, 1)}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 grid-cols-1">
-          <Card className="border-border/70 shadow-sm">
-            <CardHeader className="border-b border-border/60 pb-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base">Selected day</CardTitle>
-                  <CardDescription>{format(selectedDate, "EEE, d MMM yyyy")}</CardDescription>
-                </div>
-                <Button size="sm" onClick={() => openCreateDialog(selectedDateKey, 1)}>
-                  <Plus className="mr-1.5 size-4" />
-                  Add
-                </Button>
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <CardTitle className="text-base">
+                  {format(selectedDate, "EEEE, d MMM")}
+                </CardTitle>
+                <CardDescription>
+                  {formatDuration(selectedTotalHours)} total ·{" "}
+                  {formatDuration(selectedPlannedHours)} planned ·{" "}
+                  {formatDuration(selectedSyncedHours)} synced
+                </CardDescription>
               </div>
-            </CardHeader>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openCreateDialog(selectedDateKey, 1)}
+              >
+                <Plus className="mr-1.5 size-4" />
+                Add
+              </Button>
+            </div>
+          </CardHeader>
 
-            <CardContent className="space-y-4 pt-4">
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-2xl border border-border/60 bg-muted/20 p-3">
-                  <p className="text-xs text-muted-foreground">Planned</p>
-                  <p className="text-2xl font-semibold tracking-tight">{formatDuration(selectedPlannedHours)}</p>
-                </div>
-                <div className="rounded-2xl border border-border/60 bg-muted/20 p-3">
-                  <p className="text-xs text-muted-foreground">Synced</p>
-                  <p className="text-2xl font-semibold tracking-tight">{formatDuration(selectedSyncedHours)}</p>
-                </div>
-                <div className="rounded-2xl border border-border/60 bg-muted/20 p-3">
-                  <p className="text-xs text-muted-foreground">Total</p>
-                  <p className="text-2xl font-semibold tracking-tight">{formatDuration(selectedTotalHours)}</p>
+          <CardContent className="space-y-6 pt-2">
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium">Planned work</h3>
+                <div className="flex gap-1">
+                  {[0.5, 1, 2].map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => handleAddQuick(value)}
+                      className="rounded-full px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted"
+                    >
+                      +{value === 0.5 ? "30m" : `${value}h`}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium">Planned work</h3>
-                  <div className="flex gap-1">
-                    <button type="button" onClick={() => handleAddQuick(0.5)} className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted">
-                      +30m
+              {selectedManualEntries.length === 0 ? (
+                <p className="rounded-md bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+                  No planned work yet for this day.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {selectedManualEntries.map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      onClick={() => openEditDialog(entry)}
+                      className="group flex w-full items-start justify-between gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-muted/60"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                              CATEGORY_BADGE_CLASSES[entry.category],
+                            )}
+                          >
+                            {CATEGORY_LABELS[entry.category]}
+                          </span>
+                          <span className="text-sm font-medium">
+                            {entry.description}
+                          </span>
+                        </div>
+                        {entry.jiraIssueKey && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {entry.jiraIssueKey}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <PencilLine className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+                        {formatDuration(entry.hours)}
+                      </div>
                     </button>
-                    <button type="button" onClick={() => handleAddQuick(1)} className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted">
-                      +1h
-                    </button>
-                    <button type="button" onClick={() => handleAddQuick(2)} className="rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted">
-                      +2h
-                    </button>
-                  </div>
+                  ))}
                 </div>
+              )}
+            </section>
 
-                {selectedManualEntries.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-border/70 bg-background/80 p-4 text-sm text-muted-foreground">
-                    No planned work yet for this day.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {selectedManualEntries.map((entry) => (
-                      <button
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Clock className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-medium">Synced activity</h3>
+              </div>
+
+              {selectedSyncedEntries.length === 0 ? (
+                <p className="rounded-md bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+                  No synced Jira or Bitbucket activity for this day.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {selectedSyncedEntries
+                    .slice()
+                    .sort(
+                      (left, right) =>
+                        left.occurredAt.getTime() - right.occurredAt.getTime(),
+                    )
+                    .map((entry) => (
+                      <div
                         key={entry.id}
-                        type="button"
-                        onClick={() => openEditDialog(entry)}
-                        className="w-full rounded-2xl border border-border/70 bg-background p-3 text-left shadow-sm transition-colors hover:border-teal-400"
+                        className="flex items-start justify-between gap-3 rounded-md px-3 py-2.5"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", CATEGORY_BADGE_CLASSES[entry.category])}>
-                                {CATEGORY_LABELS[entry.category]}
-                              </span>
-                              <span className="text-sm font-medium">{entry.description}</span>
-                            </div>
-                            <p className="mt-1 text-xs text-muted-foreground">{entry.jiraIssueKey ?? "No reference"}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium capitalize text-muted-foreground">
+                              {entry.source.toLowerCase()}
+                            </span>
+                            <span className="text-sm font-medium">
+                              {entry.description}
+                            </span>
                           </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <PencilLine className="size-3.5" />
-                            {formatDuration(entry.hours)}
+                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Globe className="size-3" />
+                            <span>{formatHour(entry.startHour)}</span>
+                            <span>·</span>
+                            <span>{CATEGORY_LABELS[entry.category]}</span>
                           </div>
                         </div>
-                      </button>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDuration(entry.durationHours)}
+                        </span>
+                      </div>
                     ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Clock className="size-4 text-teal-600" />
-                  <h3 className="text-sm font-medium">Synced activity timeline</h3>
                 </div>
-
-                {selectedSyncedEntries.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-border/70 bg-background/80 p-4 text-sm text-muted-foreground">
-                    No synced Jira or Bitbucket activity for this day.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {selectedSyncedEntries
-                      .slice()
-                      .sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime())
-                      .map((entry) => (
-                        <div key={entry.id} className="rounded-2xl border border-border/70 bg-background p-3 shadow-sm">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium capitalize text-muted-foreground">
-                                  {entry.source.toLowerCase()}
-                                </span>
-                                <span className="text-sm font-medium">{entry.description}</span>
-                              </div>
-                              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                                <Globe className="size-3.5" />
-                                <span>{formatHour(entry.startHour)}</span>
-                                <span>·</span>
-                                <span>{CATEGORY_LABELS[entry.category]}</span>
-                              </div>
-                            </div>
-                            <span className="text-xs text-muted-foreground">{formatDuration(entry.durationHours)}</span>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              )}
+            </section>
+          </CardContent>
+        </Card>
       </div>
 
       <EntryDialog
@@ -1025,7 +1136,13 @@ export function CalendarPage() {
         entry={editorState.entry}
         date={editorState.date}
         presetHours={editorState.presetHours}
-        onOpenChange={(open) => setEditorState((current) => ({ ...current, open, entry: open ? current.entry : null }))}
+        onOpenChange={(open) =>
+          setEditorState((current) => ({
+            ...current,
+            open,
+            entry: open ? current.entry : null,
+          }))
+        }
         onSave={handleSave}
         onDelete={handleDelete}
       />
