@@ -1,4 +1,4 @@
-import { index, pgTable, real, text, timestamp } from "drizzle-orm/pg-core";
+import { index, pgTable, real, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 import { user } from "@/db/schema/better-auth";
 
@@ -44,5 +44,30 @@ export const timesheetEntry = pgTable(
   (table) => [
     index("timesheet_entry_user_id_idx").on(table.userId),
     index("timesheet_entry_user_date_idx").on(table.userId, table.date),
+  ],
+);
+
+export const learningTags = ["tech", "product", "process"] as const;
+
+export const learningEntry = pgTable(
+  "learning_entry",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    date: text("date").notNull(), // ISO date string YYYY-MM-DD
+    title: text("title").notNull().default(""),
+    notes: text("notes"),
+    tag: text("tag", { enum: learningTags }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("learning_entry_user_id_idx").on(table.userId),
+    unique("learning_entry_user_date_uniq").on(table.userId, table.date),
   ],
 );

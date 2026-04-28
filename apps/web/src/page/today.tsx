@@ -60,6 +60,8 @@ import {
   fetchTimesheetEntries,
   updateTimesheetEntry,
 } from "@/api/timesheets-api";
+import { fetchLearning, upsertLearning } from "@/api/learning-api";
+import type { LearningUpsertInput } from "@/api/learning-api";
 import { useIntegrationTimesheet } from "@/hooks/use-integrations";
 import {
   getLocalIsoDateFromTimestamp,
@@ -889,6 +891,12 @@ export function TodayPage() {
   const selectedWeekStartStr = format(selectedWeekStart, "yyyy-MM-dd");
   const selectedWeekEndStr = format(addDays(selectedWeekStart, 4), "yyyy-MM-dd");
 
+  const learningQuery = useQuery({
+    queryKey: ["learning", dateStr],
+    queryFn: () => fetchLearning(dateStr),
+    enabled: isAuthenticated,
+  });
+
   const timesheetDateQuery = useQuery({
     queryKey: ["timesheet-date", dateStr],
     queryFn: () => fetchTimesheetByDate(dateStr),
@@ -933,6 +941,15 @@ export function TodayPage() {
     title: "",
     notes: "",
   }));
+  const [streak, setStreak] = useState(0);
+
+  // Debounce timer ref for learning autosave
+  const learningDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Always holds the latest learning value so the unmount cleanup can access it
+  const latestLearningRef = useRef(learning);
+  useEffect(() => {
+    latestLearningRef.current = learning;
+  });
 
   // Autosave indicator — "idle" | "saving" | "saved"
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("saved");
@@ -950,7 +967,41 @@ export function TodayPage() {
       title: "",
       notes: "",
     });
+    setStreak(0);
   }, [dateStr]);
+
+  // Flush any pending learning save immediately when the component unmounts
+  // (guards against navigating away before the 800ms debounce fires)
+  useEffect(() => {
+    return () => {
+      if (learningDebounceRef.current) {
+        clearTimeout(learningDebounceRef.current);
+        learningDebounceRef.current = null;
+        const curr = latestLearningRef.current;
+        void upsertLearning(curr.date, {
+          title: curr.title,
+          notes: curr.notes ?? undefined,
+          tag: curr.tag ?? null,
+        });
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!learningQuery.data) return;
+    const { entry, streak: fetchedStreak } = learningQuery.data;
+    if (entry) {
+      setLearning({
+        id: entry.id,
+        date: entry.date,
+        title: entry.title,
+        notes: entry.notes ?? "",
+        tag: entry.tag ?? undefined,
+      });
+    }
+    setStreak(fetchedStreak);
+  }, [learningQuery.data]);
 
   // Derived values
 
@@ -1171,6 +1222,28 @@ export function TodayPage() {
     setDismissedCrossCheckIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   };
 
+  const handleLearningChange = (updates: Partial<LearningEntry>) => {
+    const next = { ...learning, ...updates };
+    setLearning(next);
+
+    // Cancel any pending debounce
+    if (learningDebounceRef.current) clearTimeout(learningDebounceRef.current);
+
+    setSaveState("saving");
+    learningDebounceRef.current = setTimeout(async () => {
+      const payload: LearningUpsertInput = {
+        title: next.title,
+        notes: next.notes ?? undefined,
+        tag: next.tag ?? null,
+      };
+      const { data, error } = await tryCatch(upsertLearning(dateStr, payload));
+      if (!error && data) {
+        setStreak(data.streak);
+      }
+      setSaveState("saved");
+    }, 800);
+  };
+
   // Render
 
   return (
@@ -1274,8 +1347,8 @@ export function TodayPage() {
               {/* TODO: replace 12 with real streak from learning API */}
               <MetricCard
                 label="Learning streak"
-                value="12"
-                sub="days"
+                value={streak}
+                sub={`${streak === 1 ? "day" : "days"}`}
                 valueClassName="text-amber-600"
               />
             </div>
@@ -1291,8 +1364,8 @@ export function TodayPage() {
             {/* Learning widget */}
             <LearningWidget
               learning={learning}
-              onChange={(updates) => setLearning((prev) => ({ ...prev, ...updates }))}
-              streak={12} // TODO: replace with real streak from API
+              onChange={handleLearningChange}
+              streak={streak}
             />
           </div>
 

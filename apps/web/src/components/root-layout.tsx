@@ -6,7 +6,6 @@ import { AppSidebar } from "@/components/app-sidebar";
 import {
   SidebarInset,
   SidebarProvider,
-  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { useIntegrationStatus } from "@/hooks/use-integrations";
@@ -54,6 +53,7 @@ export function RootLayout() {
                 <div className="text-xs text-muted-foreground">{title}</div>
               </div>
             </div>
+            <ThemeSwitcher/>
           </div>
         </header>
         <main className="flex-1 p-4 sm:p-6">
