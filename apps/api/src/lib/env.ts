@@ -22,6 +22,7 @@ const envSchema = z.object({
   BITBUCKET_CLIENT_ID: z.string().min(1),
   BITBUCKET_CLIENT_SECRET: z.string().min(1),
   BITBUCKET_OAUTH_REDIRECT_URI: z.url().optional(),
+  // ATLASSIAN_ORG_ID: z.string().min(1).optional(),
 });
 
 export const env = envSchema.parse(process.env);

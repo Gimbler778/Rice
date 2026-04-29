@@ -781,6 +781,3 @@ export function ReportsPage() {
   return <ReportsContent scope="individual" />;
 }
 
-export function TeamReportsPage() {
-  return <ReportsContent scope="team" />;
-}

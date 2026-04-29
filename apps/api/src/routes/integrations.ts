@@ -25,15 +25,15 @@ type ConnectedAccount = {
 
 type RequestAccountsResult =
   | {
-      ok: true;
-      userId: string;
-      linkedAccounts: ConnectedAccount[];
-    }
+    ok: true;
+    userId: string;
+    linkedAccounts: ConnectedAccount[];
+  }
   | {
-      ok: false;
-      code: number;
-      message: string;
-    };
+    ok: false;
+    code: number;
+    message: string;
+  };
 
 type BitbucketWorkspace = {
   slug?: string;
@@ -1195,4 +1195,327 @@ router.get("/integrations/timesheet", async (req, res) => {
   );
 });
 
+// Team Reports
+
+import {
+  fetchAllAtlassianTeams,
+  fetchTeamMembers,
+  type TeamWithMembers,
+} from "@/lib/teams";
+
+type TeamMemberIssueAggregate = {
+  accountId: string;
+  displayName: string | null;
+  totalIssues: number;
+  totalTimeSpentSeconds: number;
+  issuesByStatus: Record<string, number>;
+  issuesByType: Record<string, number>;
+  issuesByProject: Record<string, number>;
+};
+
+type TeamReportData = {
+  teamId: string;
+  displayName: string;
+  description: string;
+  memberCount: number;
+  totalIssues: number;
+  totalTimeSpentSeconds: number;
+  issuesByStatus: Record<string, number>;
+  issuesByType: Record<string, number>;
+  issuesByProject: Record<string, number>;
+  members: TeamMemberIssueAggregate[];
+};
+
+function aggregateIssuesByField<T extends string>(
+  issues: Array<{ [K in T]?: string | null }>,
+  field: T,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const issue of issues) {
+    const value = (issue as Record<string, unknown>)[field];
+    const key = typeof value === "string" && value ? value : "Unknown";
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}
+
+
+router.get("/integrations/teams", async (req, res) => {
+  const requestAccounts = await resolveRequestAccounts(req.headers);
+
+  if (!requestAccounts.ok) {
+    return sendError(res, requestAccounts.code, requestAccounts.message);
+  }
+
+  const { userId, linkedAccounts } = requestAccounts;
+  const atlassianAccount = linkedAccounts.find(
+    (entry) => entry.providerId === "atlassian",
+  );
+
+  if (!atlassianAccount?.accessToken) {
+    return sendError(
+      res,
+      RESPONSE_CODE.BAD_REQUEST,
+      "No Atlassian account connected. Please connect Atlassian first.",
+    );
+  }
+
+  let accessToken = atlassianAccount.accessToken;
+
+  // Refresh token if expired
+  if (
+    atlassianAccount.accessTokenExpiresAt &&
+    atlassianAccount.accessTokenExpiresAt.getTime() <= Date.now() &&
+    atlassianAccount.refreshToken
+  ) {
+    const { data: refreshedTokens, error: refreshError } = await tryCatch(
+      refreshAtlassianAccessToken(atlassianAccount.refreshToken),
+    );
+
+    if (!refreshError) {
+      accessToken = refreshedTokens.accessToken;
+      await tryCatch(
+        persistRefreshedAccountTokens(userId, "atlassian", refreshedTokens),
+      );
+    }
+  }
+
+  const { data: jiraResources, error: resourceError } = await tryCatch(
+    resolveJiraResources(accessToken),
+  );
+
+  if (resourceError) {
+    logger.error({ err: resourceError, userId }, "Failed to fetch Jira resources");
+    return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to fetch Jira sites as teams");
+  }
+
+  const teams = (jiraResources || []).map((resource) => {
+    let siteName = "Jira Site";
+    try {
+      if (resource.jiraSiteUrl) {
+        siteName = new URL(resource.jiraSiteUrl).hostname;
+      }
+    } catch {
+      // ignore
+    }
+
+    return {
+      teamId: resource.cloudId,
+      displayName: siteName,
+      description: resource.jiraSiteUrl || "Jira Site",
+      state: "ACTIVE",
+      teamType: "OPEN",
+      organizationId: "site",
+    };
+  });
+
+  return sendSuccess(res, RESPONSE_CODE.OK, "Teams fetched successfully", {
+    teams,
+    orgId: "site",
+  });
+});
+
+/**
+ * GET /integrations/team-report/:teamId
+ * Returns aggregated Jira issue data for all members of a specific team.
+ * The data is aggregated by status, issue type, and project.
+ */
+router.get("/integrations/team-report/:teamId", async (req, res) => {
+  const { teamId } = req.params; // we use teamId as cloudId
+  const requestAccounts = await resolveRequestAccounts(req.headers);
+
+  if (!requestAccounts.ok) {
+    return sendError(res, requestAccounts.code, requestAccounts.message);
+  }
+
+  const { userId, linkedAccounts } = requestAccounts;
+  const atlassianAccount = linkedAccounts.find(
+    (entry) => entry.providerId === "atlassian",
+  );
+
+  if (!atlassianAccount?.accessToken) {
+    return sendError(
+      res,
+      RESPONSE_CODE.BAD_REQUEST,
+      "No Atlassian account connected.",
+    );
+  }
+
+  let accessToken = atlassianAccount.accessToken;
+
+  // Refresh token if expired
+  if (
+    atlassianAccount.accessTokenExpiresAt &&
+    atlassianAccount.accessTokenExpiresAt.getTime() <= Date.now() &&
+    atlassianAccount.refreshToken
+  ) {
+    const { data: refreshedTokens, error: refreshError } = await tryCatch(
+      refreshAtlassianAccessToken(atlassianAccount.refreshToken),
+    );
+
+    if (!refreshError) {
+      accessToken = refreshedTokens.accessToken;
+      await tryCatch(
+        persistRefreshedAccountTokens(userId, "atlassian", refreshedTokens),
+      );
+    }
+  }
+
+  const memberAggregates = new Map<string, TeamMemberIssueAggregate>();
+
+  // Build a date-bounded JQL that filters by recency
+  const periodQuery = req.query.period as string | undefined;
+  let jqlDateClause = "updated >= -7d"; // default to last 7 days
+  if (periodQuery === "month") {
+    jqlDateClause = "updated >= -30d";
+  } else if (periodQuery === "quarter") {
+    jqlDateClause = "updated >= -90d";
+  } else if (periodQuery === "day") {
+    jqlDateClause = "updated >= -1d";
+  }
+
+  try {
+    const jql = `${jqlDateClause} ORDER BY updated DESC`;
+
+    let nextPageToken: string | undefined;
+
+    while (true) {
+      const response = await fetch(
+        `https://api.atlassian.com/ex/jira/${teamId}/rest/api/3/search/jql`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            jql,
+            maxResults: 100,
+            fields: [
+              "summary",
+              "timespent",
+              "updated",
+              "created",
+              "project",
+              "issuetype",
+              "status",
+              "assignee",
+              "labels",
+            ],
+            ...(nextPageToken ? { nextPageToken } : {}),
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.warn(
+          { cloudId: teamId, status: response.status, errorText },
+          "Failed to fetch Jira issues for site report",
+        );
+        break;
+      }
+
+      const payload = (await response.json()) as {
+        issues?: Array<{
+          id?: string;
+          key?: string;
+          fields?: {
+            summary?: string;
+            timespent?: number | null;
+            updated?: string;
+            created?: string;
+            project?: { key?: string; name?: string };
+            issuetype?: { name?: string };
+            status?: { name?: string };
+            assignee?: { accountId?: string; displayName?: string } | null;
+            labels?: string[];
+          };
+        }>;
+        isLast?: boolean;
+        nextPageToken?: string;
+      };
+
+      for (const issue of payload.issues ?? []) {
+        const assigneeAccountId = issue.fields?.assignee?.accountId;
+        // Group by user, only include issues that have an assignee
+        if (!assigneeAccountId) {
+          continue;
+        }
+
+        let aggregate = memberAggregates.get(assigneeAccountId);
+        if (!aggregate) {
+          aggregate = {
+            accountId: assigneeAccountId,
+            displayName: issue.fields?.assignee?.displayName ?? null,
+            totalIssues: 0,
+            totalTimeSpentSeconds: 0,
+            issuesByStatus: {},
+            issuesByType: {},
+            issuesByProject: {},
+          };
+          memberAggregates.set(assigneeAccountId, aggregate);
+        }
+
+        aggregate.totalIssues += 1;
+        aggregate.totalTimeSpentSeconds += issue.fields?.timespent ?? 0;
+
+        const status = issue.fields?.status?.name ?? "Unknown";
+        aggregate.issuesByStatus[status] = (aggregate.issuesByStatus[status] ?? 0) + 1;
+
+        const issueType = issue.fields?.issuetype?.name ?? "Unknown";
+        aggregate.issuesByType[issueType] = (aggregate.issuesByType[issueType] ?? 0) + 1;
+
+        const project = issue.fields?.project?.name ?? issue.fields?.project?.key ?? "Unknown";
+        aggregate.issuesByProject[project] = (aggregate.issuesByProject[project] ?? 0) + 1;
+      }
+
+      if (payload.isLast || !payload.nextPageToken) {
+        break;
+      }
+
+      nextPageToken = payload.nextPageToken;
+    }
+  } catch (error) {
+    logger.warn(
+      { err: error, cloudId: teamId },
+      "Failed to fetch Jira issues for team report via site url",
+    );
+  }
+
+  // 4. Aggregate team-level totals
+  const membersList = Array.from(memberAggregates.values());
+  const teamTotalIssues = membersList.reduce((sum, m) => sum + m.totalIssues, 0);
+  const teamTotalTime = membersList.reduce((sum, m) => sum + m.totalTimeSpentSeconds, 0);
+
+  const teamIssuesByStatus: Record<string, number> = {};
+  const teamIssuesByType: Record<string, number> = {};
+  const teamIssuesByProject: Record<string, number> = {};
+
+  for (const member of membersList) {
+    for (const [status, count] of Object.entries(member.issuesByStatus)) {
+      teamIssuesByStatus[status] = (teamIssuesByStatus[status] ?? 0) + count;
+    }
+    for (const [type, count] of Object.entries(member.issuesByType)) {
+      teamIssuesByType[type] = (teamIssuesByType[type] ?? 0) + count;
+    }
+    for (const [project, count] of Object.entries(member.issuesByProject)) {
+      teamIssuesByProject[project] = (teamIssuesByProject[project] ?? 0) + count;
+    }
+  }
+
+  return sendSuccess(res, RESPONSE_CODE.OK, "Team report generated successfully", {
+    teamId,
+    memberCount: membersList.length,
+    totalIssues: teamTotalIssues,
+    totalTimeSpentSeconds: teamTotalTime,
+    issuesByStatus: teamIssuesByStatus,
+    issuesByType: teamIssuesByType,
+    issuesByProject: teamIssuesByProject,
+    members: membersList,
+  });
+});
+
 export default router;
+

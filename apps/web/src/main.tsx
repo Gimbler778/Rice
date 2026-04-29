@@ -55,7 +55,7 @@ const ReportsPage = lazy(async () => ({
 }));
 
 const TeamReportsPage = lazy(async () => ({
-  default: (await import("@/page/reports")).TeamReportsPage,
+  default: (await import("@/page/team-reports")).TeamReportsPage,
 }));
 const NotFoundPage = () => {
   return (

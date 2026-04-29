@@ -48,6 +48,7 @@ export const auth = betterAuth({
         "read:account",
         "read:jira-work",
         "read:jira-user",
+        "read:team:jira",
         "offline_access",
         "repository",
         "pullrequest",

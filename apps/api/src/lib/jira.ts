@@ -114,11 +114,11 @@ export async function resolveJiraResources(accessToken: string) {
     .flatMap((resource) =>
       resource.id
         ? [
-            {
-              cloudId: resource.id,
-              jiraSiteUrl: resource.url ?? null,
-            },
-          ]
+          {
+            cloudId: resource.id,
+            jiraSiteUrl: resource.url ?? null,
+          },
+        ]
         : [],
     );
 }
