@@ -123,7 +123,8 @@ export function mapIntegrationEntryToTimesheetEntry(
     source: sourceMap[entry.source],
     sourceLink: entry.link ?? undefined,
     hours: toHoursWithDefault(entry.timeSeconds),
-      startHour: new Date(entry.occurredAt).getHours() + new Date(entry.occurredAt).getMinutes() / 60,
+    timeRemaining: toHoursWithDefault(entry.timeRemainingSeconds ?? 7200, 2),
+    startHour: new Date(entry.occurredAt).getHours() + new Date(entry.occurredAt).getMinutes() / 60,
     status: "in-progress",
   };
 }
@@ -146,6 +147,7 @@ export function mapIntegrationEntryToSuggestion(
       : entry.relatedData?.repositoryFullName ?? "Bitbucket activity";
 
   const estimatedHours = toHoursWithDefault(entry.timeSeconds);
+  const timeRemaining = entry.timeRemainingSeconds !== undefined ? toHoursWithDefault(entry.timeRemainingSeconds, 0) : undefined;
 
   return {
     id: entry.id,
@@ -154,6 +156,7 @@ export function mapIntegrationEntryToSuggestion(
     subtitle: `${context} · ${toRelativeTime(entry.occurredAt)}`,
     status,
     estimatedHours,
+    timeRemaining,
     suggestedCategory: mapIntegrationCategory(entry.category),
     jiraIssueKey,
     sourceLink: entry.link ?? undefined,

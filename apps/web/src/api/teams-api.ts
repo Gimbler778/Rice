@@ -25,6 +25,9 @@ export type TeamMemberAggregate = {
   issuesByStatus: Record<string, number>;
   issuesByType: Record<string, number>;
   issuesByProject: Record<string, number>;
+  timeByCategory: Record<string, number>;
+  timeByType: Record<string, number>;
+  timeByProject: Record<string, number>;
 };
 
 export type TeamReportResponse = {
@@ -35,6 +38,9 @@ export type TeamReportResponse = {
   issuesByStatus: Record<string, number>;
   issuesByType: Record<string, number>;
   issuesByProject: Record<string, number>;
+  timeByCategory: Record<string, number>;
+  timeByType: Record<string, number>;
+  timeByProject: Record<string, number>;
   members: TeamMemberAggregate[];
 };
 

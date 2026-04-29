@@ -31,6 +31,7 @@ export type TimesheetEntryInput = {
   source?: EntrySource;
   sourceLink?: string;
   hours: number;
+  timeRemaining?: number;
   startHour?: number;
   status?: EntryStatus;
 };

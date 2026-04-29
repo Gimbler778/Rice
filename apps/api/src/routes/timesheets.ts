@@ -37,6 +37,7 @@ const createEntrySchema = z.object({
   source: z.enum(entrySources).optional(),
   sourceLink: z.url().trim().max(2048).optional(),
   hours: z.number().positive().max(24),
+  timeRemaining: z.number().min(0).max(100).optional().default(0),
   status: z.enum(entryStatuses).optional(),
 });
 
@@ -48,6 +49,7 @@ const updateEntrySchema = z
     source: z.enum(entrySources).nullable().optional(),
     sourceLink: z.url().trim().max(2048).nullable().optional(),
     hours: z.number().positive().max(24).optional(),
+    timeRemaining: z.number().min(0).max(100).optional(),
     status: z.enum(entryStatuses).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
@@ -133,6 +135,7 @@ function buildCopySignature(entry: {
     entry.source ?? "",
     entry.sourceLink ?? "",
     entry.hours.toFixed(2),
+    (entry as any).timeRemaining?.toFixed(2) ?? "0.00",
   ].join("|");
 }
 
@@ -266,6 +269,7 @@ router.post("/timesheets/entries", async (req, res) => {
         source: parsedBody.data.source,
         sourceLink: parsedBody.data.sourceLink,
         hours: parsedBody.data.hours,
+        timeRemaining: parsedBody.data.timeRemaining,
         status: parsedBody.data.status ?? "in-progress",
       })
       .returning(),
@@ -438,6 +442,7 @@ router.post("/timesheets/copy-yesterday", async (req, res) => {
         source: timesheetEntry.source,
         sourceLink: timesheetEntry.sourceLink,
         hours: timesheetEntry.hours,
+        timeRemaining: timesheetEntry.timeRemaining,
       })
       .from(timesheetEntry)
       .where(
@@ -467,6 +472,7 @@ router.post("/timesheets/copy-yesterday", async (req, res) => {
       source: entry.source,
       sourceLink: entry.sourceLink,
       hours: entry.hours,
+      timeRemaining: entry.timeRemaining,
       status: "in-progress" as const,
     }));
 

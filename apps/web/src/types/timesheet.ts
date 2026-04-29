@@ -34,6 +34,7 @@ export interface TimesheetEntry {
   source?: EntrySource;
   sourceLink?: string;
   hours: number; // decimal, e.g. 2.5
+  timeRemaining?: number; // decimal, e.g. 2.5
   startHour?: number; // decimal hour when activity starts, e.g. 10, 14.5
   status: EntryStatus;
 }
@@ -65,6 +66,7 @@ export interface Suggestion {
   subtitle: string; // e.g. "Transitioned · 2h ago" or "rice-frontend · last commit 1h ago"
   status?: string; // e.g. "In progress", "In review"
   estimatedHours?: number;
+  timeRemaining?: number;
   suggestedCategory: EntryCategory;
   jiraIssueKey?: string;
   sourceLink?: string;

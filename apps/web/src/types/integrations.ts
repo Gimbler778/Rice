@@ -18,7 +18,9 @@ export interface IntegrationTimesheetEntry {
   ref: string;
   source: "Jira" | "Bitbucket";
   timeSeconds: number;
+  timeRemainingSeconds: number;
   time: string;
+  timeRemaining: string;
   link: string | null;
   occurredAt: string;
   relatedData?: {

@@ -23,6 +23,7 @@ export type JiraIssueRecord = {
   self: string | null;
   summary: string;
   timeSpentSeconds: number;
+  timeEstimateSeconds: number;
   updated: string;
   created: string | null;
   projectKey: string | null;
@@ -43,6 +44,7 @@ type JiraSearchResponse = {
     fields?: {
       summary?: string;
       timespent?: number | null;
+      timeestimate?: number | null;
       updated?: string;
       created?: string;
       project?: {
@@ -146,6 +148,7 @@ export async function fetchAllJiraIssues(accessToken: string, cloudId: string) {
           fields: [
             "summary",
             "timespent",
+            "timeestimate",
             "updated",
             "created",
             "project",
@@ -185,6 +188,7 @@ export async function fetchAllJiraIssues(accessToken: string, cloudId: string) {
         self: issue.self ?? null,
         summary: issue.fields?.summary ?? "Untitled issue",
         timeSpentSeconds: issue.fields?.timespent ?? 0,
+        timeEstimateSeconds: issue.fields?.timeestimate ?? 0,
         updated: issue.fields?.updated ?? new Date().toISOString(),
         created: issue.fields?.created ?? null,
         projectKey: issue.fields?.project?.key ?? null,

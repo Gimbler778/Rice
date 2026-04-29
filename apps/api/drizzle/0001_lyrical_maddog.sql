@@ -1,0 +1,1 @@
+ALTER TABLE "timesheet_entry" ADD COLUMN "time_remaining" real DEFAULT 0 NOT NULL;

@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 
 import { db } from "@/db/client";
-import { account } from "@/db/schema";
+import { account, timesheetEntry, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import {
@@ -58,7 +58,9 @@ type DashboardEntry = {
   ref: string;
   source: "Jira" | "Bitbucket";
   timeSeconds: number;
+  timeRemainingSeconds: number;
   time: string;
+  timeRemaining: string;
   link: string | null;
   occurredAt: string;
   relatedData?: {
@@ -687,6 +689,7 @@ async function fetchJiraEntries(accessToken: string): Promise<DashboardEntry[]> 
 
       for (const issue of issues) {
         const timeSeconds = issue.timeSpentSeconds;
+        const timeRemainingSeconds = issue.timeEstimateSeconds || 7200; // 2 hours default demo value if not assigned
         const source: "Jira" = "Jira";
         entries.push({
           id: `jira-${cloudId}-${issue.id}`,
@@ -695,7 +698,9 @@ async function fetchJiraEntries(accessToken: string): Promise<DashboardEntry[]> 
           ref: issue.key || "N/A",
           source,
           timeSeconds,
+          timeRemainingSeconds,
           time: formatDuration(timeSeconds),
+          timeRemaining: formatDuration(timeRemainingSeconds),
           link: jiraSiteUrl && issue.key ? `${jiraSiteUrl}/browse/${issue.key}` : issue.self,
           occurredAt: issue.updated,
           relatedData: {
@@ -971,6 +976,7 @@ async function fetchBitbucketEntries(
     for (const commit of commitsPayload) {
       const shortHash = commit.hash?.slice(0, 7) ?? "commit";
       const timeSeconds = 30 * 60;
+      const timeRemainingSeconds = 7200; // 2 hours default demo value
 
       entries.push({
         id: `bitbucket-${commit.hash ?? crypto.randomUUID()}`,
@@ -979,7 +985,9 @@ async function fetchBitbucketEntries(
         ref: shortHash,
         source: "Bitbucket",
         timeSeconds,
+        timeRemainingSeconds,
         time: formatDuration(timeSeconds),
+        timeRemaining: formatDuration(timeRemainingSeconds),
         link: commit.links?.html?.href ?? repository.htmlUrl,
         occurredAt: commit.date ?? new Date().toISOString(),
         relatedData: {
@@ -1057,6 +1065,7 @@ async function fetchBitbucketEntries(
       const destinationBranch = pullRequest.destination?.branch?.name ?? null;
       const occurredAt = pullRequest.updated_on ?? pullRequest.created_on ?? new Date().toISOString();
       const timeSeconds = 45 * 60;
+      const timeRemainingSeconds = 7200; // 2 hours default demo value
 
       entries.push({
         id: `bitbucket-pr-${repository.workspace}-${repository.slug}-${prId || crypto.randomUUID()}`,
@@ -1065,7 +1074,9 @@ async function fetchBitbucketEntries(
         ref: prId ? `PR-${prId}` : "PR",
         source: "Bitbucket",
         timeSeconds,
+        timeRemainingSeconds,
         time: formatDuration(timeSeconds),
+        timeRemaining: formatDuration(timeRemainingSeconds),
         link: pullRequest.links?.html?.href ?? repository.htmlUrl,
         occurredAt,
         relatedData: {
@@ -1211,6 +1222,9 @@ type TeamMemberIssueAggregate = {
   issuesByStatus: Record<string, number>;
   issuesByType: Record<string, number>;
   issuesByProject: Record<string, number>;
+  timeByCategory: Record<string, number>;
+  timeByType: Record<string, number>;
+  timeByProject: Record<string, number>;
 };
 
 type TeamReportData = {
@@ -1223,6 +1237,9 @@ type TeamReportData = {
   issuesByStatus: Record<string, number>;
   issuesByType: Record<string, number>;
   issuesByProject: Record<string, number>;
+  timeByCategory: Record<string, number>;
+  timeByType: Record<string, number>;
+  timeByProject: Record<string, number>;
   members: TeamMemberIssueAggregate[];
 };
 
@@ -1362,17 +1379,28 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
   }
 
   const memberAggregates = new Map<string, TeamMemberIssueAggregate>();
+  const issueMetadata = new Map<string, { status: string; type: string; project: string }>();
 
   // Build a date-bounded JQL that filters by recency
   const periodQuery = req.query.period as string | undefined;
   let jqlDateClause = "updated >= -7d"; // default to last 7 days
+  let timesheetFromDate = new Date();
+  timesheetFromDate.setDate(timesheetFromDate.getDate() - 7);
+
   if (periodQuery === "month") {
     jqlDateClause = "updated >= -30d";
+    timesheetFromDate = new Date();
+    timesheetFromDate.setDate(timesheetFromDate.getDate() - 30);
   } else if (periodQuery === "quarter") {
     jqlDateClause = "updated >= -90d";
+    timesheetFromDate = new Date();
+    timesheetFromDate.setDate(timesheetFromDate.getDate() - 90);
   } else if (periodQuery === "day") {
     jqlDateClause = "updated >= -1d";
+    timesheetFromDate = new Date();
+    timesheetFromDate.setDate(timesheetFromDate.getDate() - 1);
   }
+  const fromDateString = timesheetFromDate.toISOString().split("T")[0];
 
   try {
     const jql = `${jqlDateClause} ORDER BY updated DESC`;
@@ -1454,12 +1482,15 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
             issuesByStatus: {},
             issuesByType: {},
             issuesByProject: {},
+            timeByCategory: {},
+            timeByType: {},
+            timeByProject: {},
           };
           memberAggregates.set(assigneeAccountId, aggregate);
         }
 
         aggregate.totalIssues += 1;
-        aggregate.totalTimeSpentSeconds += issue.fields?.timespent ?? 0;
+        // totalTimeSpentSeconds will be calculated solely from timesheet entries
 
         const status = issue.fields?.status?.name ?? "Unknown";
         aggregate.issuesByStatus[status] = (aggregate.issuesByStatus[status] ?? 0) + 1;
@@ -1469,6 +1500,10 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
 
         const project = issue.fields?.project?.name ?? issue.fields?.project?.key ?? "Unknown";
         aggregate.issuesByProject[project] = (aggregate.issuesByProject[project] ?? 0) + 1;
+
+        if (issue.key) {
+          issueMetadata.set(issue.key, { status, type: issueType, project });
+        }
       }
 
       if (payload.isLast || !payload.nextPageToken) {
@@ -1484,6 +1519,77 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
     );
   }
 
+  // 4. Map Jira account IDs to internal DB users to fetch their timesheets
+  const { data: mappedAccounts } = await tryCatch(
+    db
+      .select({ userId: account.userId, accountId: account.accountId, name: user.name })
+      .from(account)
+      .innerJoin(user, eq(account.userId, user.id))
+      .where(eq(account.providerId, "atlassian"))
+  );
+
+  const accountToUser = new Map<string, { id: string; name: string }>();
+  if (mappedAccounts) {
+    for (const acc of mappedAccounts) {
+      accountToUser.set(acc.accountId, { id: acc.userId, name: acc.name });
+    }
+  }
+
+  // After aggregating Jira issues, fetch timesheet entries per member and add time
+  for (const aggregate of memberAggregates.values()) {
+    const internalUser = accountToUser.get(aggregate.accountId);
+    if (!internalUser) {
+      continue;
+    }
+
+    // Update display name from DB
+    aggregate.displayName = internalUser.name;
+
+    const { data: tsRows, error: tsError } = await tryCatch(
+      db
+        .select({
+          hours: timesheetEntry.hours,
+          category: timesheetEntry.category,
+          jiraIssueKey: timesheetEntry.jiraIssueKey,
+          source: timesheetEntry.source,
+        })
+        .from(timesheetEntry)
+        .where(
+          and(
+            eq(timesheetEntry.userId, internalUser.id),
+            gte(timesheetEntry.date, fromDateString)
+          )
+        ),
+    );
+    if (!tsError && tsRows) {
+      let memberTotalSeconds = 0;
+      for (const row of tsRows) {
+        const seconds = Math.round((row.hours ?? 0) * 3600);
+        if (seconds <= 0) continue;
+
+        memberTotalSeconds += seconds;
+
+        const cat = row.category ?? "Unknown";
+        aggregate.timeByCategory[cat] = (aggregate.timeByCategory[cat] ?? 0) + seconds;
+
+        const issueKey = row.jiraIssueKey;
+        if (issueKey && issueMetadata.has(issueKey)) {
+          const meta = issueMetadata.get(issueKey)!;
+          aggregate.timeByType[meta.type] = (aggregate.timeByType[meta.type] ?? 0) + seconds;
+          aggregate.timeByProject[meta.project] = (aggregate.timeByProject[meta.project] ?? 0) + seconds;
+        } else if (issueKey) {
+          aggregate.timeByType["Unknown"] = (aggregate.timeByType["Unknown"] ?? 0) + seconds;
+          aggregate.timeByProject["Unknown"] = (aggregate.timeByProject["Unknown"] ?? 0) + seconds;
+        } else {
+          const unlinkedLabel = row.source ? `Unlinked (${row.source})` : "Unlinked";
+          aggregate.timeByType["Unlinked"] = (aggregate.timeByType["Unlinked"] ?? 0) + seconds;
+          aggregate.timeByProject[unlinkedLabel] = (aggregate.timeByProject[unlinkedLabel] ?? 0) + seconds;
+        }
+      }
+      aggregate.totalTimeSpentSeconds += memberTotalSeconds;
+    }
+  }
+
   // 4. Aggregate team-level totals
   const membersList = Array.from(memberAggregates.values());
   const teamTotalIssues = membersList.reduce((sum, m) => sum + m.totalIssues, 0);
@@ -1492,6 +1598,9 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
   const teamIssuesByStatus: Record<string, number> = {};
   const teamIssuesByType: Record<string, number> = {};
   const teamIssuesByProject: Record<string, number> = {};
+  const teamTimeByCategory: Record<string, number> = {};
+  const teamTimeByType: Record<string, number> = {};
+  const teamTimeByProject: Record<string, number> = {};
 
   for (const member of membersList) {
     for (const [status, count] of Object.entries(member.issuesByStatus)) {
@@ -1503,6 +1612,16 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
     for (const [project, count] of Object.entries(member.issuesByProject)) {
       teamIssuesByProject[project] = (teamIssuesByProject[project] ?? 0) + count;
     }
+
+    for (const [cat, secs] of Object.entries(member.timeByCategory)) {
+      teamTimeByCategory[cat] = (teamTimeByCategory[cat] ?? 0) + secs;
+    }
+    for (const [type, secs] of Object.entries(member.timeByType)) {
+      teamTimeByType[type] = (teamTimeByType[type] ?? 0) + secs;
+    }
+    for (const [project, secs] of Object.entries(member.timeByProject)) {
+      teamTimeByProject[project] = (teamTimeByProject[project] ?? 0) + secs;
+    }
   }
 
   return sendSuccess(res, RESPONSE_CODE.OK, "Team report generated successfully", {
@@ -1513,6 +1632,9 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
     issuesByStatus: teamIssuesByStatus,
     issuesByType: teamIssuesByType,
     issuesByProject: teamIssuesByProject,
+    timeByCategory: teamTimeByCategory,
+    timeByType: teamTimeByType,
+    timeByProject: teamTimeByProject,
     members: membersList,
   });
 });

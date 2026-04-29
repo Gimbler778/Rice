@@ -60,6 +60,42 @@ function getTypeColor(type: string): string {
   return TYPE_COLORS[type] ?? "var(--secondary)";
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  development: "Development",
+  code_review: "Code Review",
+  testing: "Testing",
+  documentation: "Documentation",
+  meetings: "Meetings",
+  admin: "Admin",
+  org_sessions: "Org Sessions",
+  events: "Events",
+  support: "Support",
+  learning: "Learning",
+  manual_other: "Other",
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  development: "var(--chart-1)",
+  code_review: "var(--chart-2)",
+  testing: "var(--chart-3)",
+  documentation: "var(--chart-4)",
+  meetings: "var(--chart-5)",
+  admin: "var(--muted-foreground)",
+  org_sessions: "var(--primary)",
+  events: "var(--secondary)",
+  support: "var(--destructive)",
+  learning: "var(--accent)",
+  manual_other: "var(--muted-foreground)",
+};
+
+function getCategoryColor(cat: string): string {
+  return CATEGORY_COLORS[cat] ?? "var(--primary)";
+}
+
+function formatCategoryLabel(cat: string): string {
+  return CATEGORY_LABELS[cat] ?? cat;
+}
+
 // ── Utility ────────────────────────────────────────────────────────
 
 function formatDuration(totalSeconds: number): string {
@@ -101,11 +137,15 @@ function DonutChart({
   colorFn,
   centerLabel,
   centerSub,
+  valueFormatter = (v) => String(v),
+  labelFormatter = (l) => l,
 }: {
   data: Record<string, number>;
   colorFn: (key: string) => string;
   centerLabel: string;
   centerSub: string;
+  valueFormatter?: (value: number) => string;
+  labelFormatter?: (label: string) => string;
 }) {
   const entries = sortedEntries(data);
   const total = entries.reduce((sum, [, value]) => sum + value, 0);
@@ -198,9 +238,9 @@ function DonutChart({
                 className="size-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: colorFn(segment.key) }}
               />
-              <p className="flex-1 truncate text-sm">{segment.key}</p>
+              <p className="flex-1 truncate text-sm" title={segment.key}>{labelFormatter(segment.key)}</p>
               <p className="text-xs tabular-nums text-muted-foreground">
-                {segment.value}
+                {valueFormatter(segment.value)}
               </p>
               <p className="w-10 text-right text-xs tabular-nums text-muted-foreground">
                 {Math.round(segment.size * 100)}%
@@ -217,10 +257,14 @@ function HorizontalBarChart({
   data,
   colorFn,
   labelSuffix = "",
+  valueFormatter,
+  labelFormatter = (l) => l,
 }: {
   data: Record<string, number>;
   colorFn: (key: string) => string;
   labelSuffix?: string;
+  valueFormatter?: (value: number) => string;
+  labelFormatter?: (label: string) => string;
 }) {
   const entries = sortedEntries(data);
   const maxValue = Math.max(1, ...entries.map(([, v]) => v));
@@ -238,9 +282,9 @@ function HorizontalBarChart({
       {entries.map(([key, value]) => (
         <div key={key} className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm font-medium truncate">{key}</p>
+            <p className="text-sm font-medium truncate" title={key}>{labelFormatter(key)}</p>
             <p className="text-xs tabular-nums text-muted-foreground shrink-0">
-              {value}{labelSuffix}
+              {valueFormatter ? valueFormatter(value) : `${value}${labelSuffix}`}
             </p>
           </div>
           <div className="flex h-2 overflow-hidden rounded-full bg-muted">
@@ -292,11 +336,11 @@ function MemberTable({ members }: { members: TeamMemberAggregate[] }) {
                     <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                       {member.displayName
                         ? member.displayName
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .toUpperCase()
-                            .slice(0, 2)
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .toUpperCase()
+                          .slice(0, 2)
                         : "?"}
                     </div>
                     <span className="font-medium truncate">
@@ -414,7 +458,7 @@ function TeamSelector({
                 className={cn(
                   "flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent/50",
                   selectedTeamId === team.teamId &&
-                    "bg-primary/5 text-primary",
+                  "bg-primary/5 text-primary",
                 )}
               >
                 <Users className="mt-0.5 size-4 shrink-0" />
@@ -471,24 +515,24 @@ export function TeamReportsPage() {
       ["Team Report"],
       ["Team", activeTeam?.displayName ?? "Unknown"],
       ["Period", PERIOD_LABELS[period]],
-      ["Total Issues", String(report.totalIssues)],
+      ["Total Issues Updated", String(report.totalIssues)],
       ["Total Time Logged", formatDuration(report.totalTimeSpentSeconds)],
       ["Members", String(report.memberCount)],
       [],
-      ["Issues by Status"],
-      ["Status", "Count"],
-      ...sortedEntries(report.issuesByStatus).map(([k, v]) => [k, String(v)]),
+      ["Time by Category"],
+      ["Category", "Time"],
+      ...sortedEntries(report.timeByCategory).map(([k, v]) => [formatCategoryLabel(k), formatDuration(v)]),
       [],
-      ["Issues by Type"],
-      ["Type", "Count"],
-      ...sortedEntries(report.issuesByType).map(([k, v]) => [k, String(v)]),
+      ["Time by Type"],
+      ["Type", "Time"],
+      ...sortedEntries(report.timeByType).map(([k, v]) => [k, formatDuration(v)]),
       [],
-      ["Issues by Project"],
-      ["Project", "Count"],
-      ...sortedEntries(report.issuesByProject).map(([k, v]) => [k, String(v)]),
+      ["Time by Project"],
+      ["Project", "Time"],
+      ...sortedEntries(report.timeByProject).map(([k, v]) => [k, formatDuration(v)]),
       [],
       ["Members Breakdown"],
-      ["Name", "Issues", "Time Logged"],
+      ["Name", "Issues Updated", "Time Logged"],
       ...report.members.map((m) => [
         m.displayName ?? m.accountId,
         String(m.totalIssues),
@@ -653,10 +697,10 @@ export function TeamReportsPage() {
               value={
                 report.memberCount > 0
                   ? formatDuration(
-                      Math.round(
-                        report.totalTimeSpentSeconds / report.memberCount,
-                      ),
-                    )
+                    Math.round(
+                      report.totalTimeSpentSeconds / report.memberCount,
+                    ),
+                  )
                   : "0h"
               }
               sub="time logged"
@@ -668,18 +712,20 @@ export function TeamReportsPage() {
             <Card className="border-border/60 shadow-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">
-                  Issues by status
+                  Time by category
                 </CardTitle>
                 <CardDescription>
-                  Distribution of team issues across statuses
+                  Breakdown of logged hours by activity
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <DonutChart
-                  data={report.issuesByStatus}
-                  colorFn={getStatusColor}
-                  centerLabel={String(report.totalIssues)}
-                  centerSub="issues"
+                  data={report.timeByCategory}
+                  colorFn={getCategoryColor}
+                  centerLabel={formatDuration(report.totalTimeSpentSeconds)}
+                  centerSub="total"
+                  valueFormatter={formatDuration}
+                  labelFormatter={formatCategoryLabel}
                 />
               </CardContent>
             </Card>
@@ -687,38 +733,37 @@ export function TeamReportsPage() {
             <Card className="border-border/60 shadow-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">
-                  Issues by type
+                  Time by issue type
                 </CardTitle>
                 <CardDescription>
-                  Breakdown by issue type (Bug, Story, Task, etc.)
+                  Time spent across issue types
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <DonutChart
-                  data={report.issuesByType}
+                  data={report.timeByType}
                   colorFn={getTypeColor}
-                  centerLabel={String(
-                    Object.keys(report.issuesByType).length,
-                  )}
-                  centerSub="types"
+                  centerLabel={formatDuration(report.totalTimeSpentSeconds)}
+                  centerSub="total"
+                  valueFormatter={formatDuration}
                 />
               </CardContent>
             </Card>
 
-            <Card className="border-border/60 shadow-sm lg:col-span-2">
+            <Card className="border-border/60 shadow-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">
-                  Issues by project
+                  Time by project
                 </CardTitle>
                 <CardDescription>
-                  How team work is distributed across Jira projects
+                  Time logged per project
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <HorizontalBarChart
-                  data={report.issuesByProject}
+                  data={report.timeByProject}
                   colorFn={() => "var(--primary)"}
-                  labelSuffix=" issues"
+                  valueFormatter={formatDuration}
                 />
               </CardContent>
             </Card>
