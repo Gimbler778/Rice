@@ -1,14 +1,3 @@
-// API endpoints this page will consume:
-//   GET  /api/timesheets/date/:date    → fetch entries for a date
-//   POST /api/timesheets/entries       → create new entry
-//   PATCH /api/timesheets/entries/:id  → update entry (autosave)
-//   DELETE /api/timesheets/entries/:id → delete entry
-//   GET  /api/suggestions?date=:date   → fetch JIRA + Bitbucket suggestions
-//   POST /api/suggestions/accept       → accept a suggestion as an entry
-//   POST /api/suggestions/dismiss      → dismiss a suggestion
-//   PUT  /api/learning/:date           → upsert learning of the day
-//   POST /api/timesheets/copy-yesterday → copy yesterday's entries
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, format, startOfWeek } from "date-fns";
 import { useQuery } from "@tanstack/react-query";

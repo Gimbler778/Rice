@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 
 import { db } from "@/db/client";
-import { account, timesheetEntry, user } from "@/db/schema";
+import { account, timesheetEntry } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import {
@@ -1256,6 +1256,49 @@ function aggregateIssuesByField<T extends string>(
   return counts;
 }
 
+function isBitbucketEntry(row: { source: string | null; sourceLink?: string | null }) {
+  if (row.source === "bitbucket") {
+    return true;
+  }
+
+  return Boolean(row.sourceLink && /bitbucket\.org/i.test(row.sourceLink));
+}
+
+function padIsoPart(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function toLocalDateString(date: Date) {
+  return [
+    date.getFullYear(),
+    padIsoPart(date.getMonth() + 1),
+    padIsoPart(date.getDate()),
+  ].join("-");
+}
+
+function getLocalStartOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getLocalStartOfWeek(date: Date) {
+  const start = getLocalStartOfDay(date);
+  const day = start.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  start.setDate(start.getDate() + offset);
+  return start;
+}
+
+function getLocalStartOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function getLocalStartOfQuarter(date: Date) {
+  const quarterStartMonth = Math.floor(date.getMonth() / 3) * 3;
+  return new Date(date.getFullYear(), quarterStartMonth, 1);
+}
+
+const BITBUCKET_TYPE_LABEL = "Bitbucket items (PRs/Commits/Merges)";
+
 
 router.get("/integrations/teams", async (req, res) => {
   const requestAccounts = await resolveRequestAccounts(req.headers);
@@ -1332,11 +1375,7 @@ router.get("/integrations/teams", async (req, res) => {
   });
 });
 
-/**
- * GET /integrations/team-report/:teamId
- * Returns aggregated Jira issue data for all members of a specific team.
- * The data is aggregated by status, issue type, and project.
- */
+/** team report aggregation **/
 router.get("/integrations/team-report/:teamId", async (req, res) => {
   const { teamId } = req.params; // we use teamId as cloudId
   const requestAccounts = await resolveRequestAccounts(req.headers);
@@ -1381,26 +1420,24 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
   const memberAggregates = new Map<string, TeamMemberIssueAggregate>();
   const issueMetadata = new Map<string, { status: string; type: string; project: string }>();
 
-  // Build a date-bounded JQL that filters by recency
+  // Build a date-bounded JQL and DB range that match the selected reporting period.
   const periodQuery = req.query.period as string | undefined;
-  let jqlDateClause = "updated >= -7d"; // default to last 7 days
-  let timesheetFromDate = new Date();
-  timesheetFromDate.setDate(timesheetFromDate.getDate() - 7);
+  const today = new Date();
+  let timesheetFromDate = getLocalStartOfWeek(today);
+  let jqlDateClause = `updated >= "${toLocalDateString(timesheetFromDate)}"`;
 
   if (periodQuery === "month") {
-    jqlDateClause = "updated >= -30d";
-    timesheetFromDate = new Date();
-    timesheetFromDate.setDate(timesheetFromDate.getDate() - 30);
+    timesheetFromDate = getLocalStartOfMonth(today);
+    jqlDateClause = `updated >= "${toLocalDateString(timesheetFromDate)}"`;
   } else if (periodQuery === "quarter") {
-    jqlDateClause = "updated >= -90d";
-    timesheetFromDate = new Date();
-    timesheetFromDate.setDate(timesheetFromDate.getDate() - 90);
+    timesheetFromDate = getLocalStartOfQuarter(today);
+    jqlDateClause = `updated >= "${toLocalDateString(timesheetFromDate)}"`;
   } else if (periodQuery === "day") {
-    jqlDateClause = "updated >= -1d";
-    timesheetFromDate = new Date();
-    timesheetFromDate.setDate(timesheetFromDate.getDate() - 1);
+    timesheetFromDate = getLocalStartOfDay(today);
+    jqlDateClause = `updated >= "${toLocalDateString(timesheetFromDate)}"`;
   }
-  const fromDateString = timesheetFromDate.toISOString().split("T")[0];
+  const fromDateString = toLocalDateString(timesheetFromDate);
+  const toDateString = toLocalDateString(today);
 
   try {
     const jql = `${jqlDateClause} ORDER BY updated DESC`;
@@ -1522,71 +1559,84 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
   // 4. Map Jira account IDs to internal DB users to fetch their timesheets
   const { data: mappedAccounts } = await tryCatch(
     db
-      .select({ userId: account.userId, accountId: account.accountId, name: user.name })
+      .select({ userId: account.userId, accountId: account.accountId })
       .from(account)
-      .innerJoin(user, eq(account.userId, user.id))
       .where(eq(account.providerId, "atlassian"))
   );
 
-  const accountToUser = new Map<string, { id: string; name: string }>();
-  if (mappedAccounts) {
-    for (const acc of mappedAccounts) {
-      accountToUser.set(acc.accountId, { id: acc.userId, name: acc.name });
-    }
-  }
-
   // After aggregating Jira issues, fetch timesheet entries per member and add time
-  for (const aggregate of memberAggregates.values()) {
-    const internalUser = accountToUser.get(aggregate.accountId);
-    if (!internalUser) {
-      continue;
-    }
+  // Also fetch all timesheets for mapped accounts in this period to ensure we include members with 0 issues
+  const { data: tsRows, error: tsError } = await tryCatch(
+    db
+      .select({
+        userId: timesheetEntry.userId,
+        hours: timesheetEntry.hours,
+        category: timesheetEntry.category,
+        jiraIssueKey: timesheetEntry.jiraIssueKey,
+        source: timesheetEntry.source,
+        description: timesheetEntry.description,
+        atlassianName: timesheetEntry.atlassianName,
+      })
+      .from(timesheetEntry)
+      .where(and(gte(timesheetEntry.date, fromDateString), lte(timesheetEntry.date, toDateString)))
+  );
 
-    // Update display name from DB
-    aggregate.displayName = internalUser.name;
+  if (!tsError && tsRows) {
+    for (const row of tsRows) {
+      const mapped = mappedAccounts?.find(a => a.userId === row.userId);
+      const accountId = mapped?.accountId ?? row.userId;
 
-    const { data: tsRows, error: tsError } = await tryCatch(
-      db
-        .select({
-          hours: timesheetEntry.hours,
-          category: timesheetEntry.category,
-          jiraIssueKey: timesheetEntry.jiraIssueKey,
-          source: timesheetEntry.source,
-        })
-        .from(timesheetEntry)
-        .where(
-          and(
-            eq(timesheetEntry.userId, internalUser.id),
-            gte(timesheetEntry.date, fromDateString)
-          )
-        ),
-    );
-    if (!tsError && tsRows) {
-      let memberTotalSeconds = 0;
-      for (const row of tsRows) {
-        const seconds = Math.round((row.hours ?? 0) * 3600);
-        if (seconds <= 0) continue;
+      let aggregate = memberAggregates.get(accountId);
+      if (!aggregate) {
+        if (!mapped) continue; // Only report on users who linked Atlassian
 
-        memberTotalSeconds += seconds;
-
-        const cat = row.category ?? "Unknown";
-        aggregate.timeByCategory[cat] = (aggregate.timeByCategory[cat] ?? 0) + seconds;
-
-        const issueKey = row.jiraIssueKey;
-        if (issueKey && issueMetadata.has(issueKey)) {
-          const meta = issueMetadata.get(issueKey)!;
-          aggregate.timeByType[meta.type] = (aggregate.timeByType[meta.type] ?? 0) + seconds;
-          aggregate.timeByProject[meta.project] = (aggregate.timeByProject[meta.project] ?? 0) + seconds;
-        } else if (issueKey) {
-          aggregate.timeByType["Unknown"] = (aggregate.timeByType["Unknown"] ?? 0) + seconds;
-          aggregate.timeByProject["Unknown"] = (aggregate.timeByProject["Unknown"] ?? 0) + seconds;
-        } else {
-          const unlinkedLabel = row.source ? `Unlinked (${row.source})` : "Unlinked";
-          aggregate.timeByType["Unlinked"] = (aggregate.timeByType["Unlinked"] ?? 0) + seconds;
-          aggregate.timeByProject[unlinkedLabel] = (aggregate.timeByProject[unlinkedLabel] ?? 0) + seconds;
-        }
+        aggregate = {
+          accountId: accountId,
+          displayName: row.atlassianName ?? null,
+          totalIssues: 0,
+          totalTimeSpentSeconds: 0,
+          issuesByStatus: {},
+          issuesByType: {},
+          issuesByProject: {},
+          timeByCategory: {},
+          timeByType: {},
+          timeByProject: {},
+        };
+        memberAggregates.set(accountId, aggregate);
+      } else if (row.atlassianName) {
+        aggregate.displayName = row.atlassianName;
       }
-      aggregate.totalTimeSpentSeconds += memberTotalSeconds;
+
+      const seconds = Math.round((row.hours ?? 0) * 3600);
+      if (seconds <= 0) continue;
+
+      aggregate.totalTimeSpentSeconds += seconds;
+
+      const cat = row.category ?? "Unknown";
+      aggregate.timeByCategory[cat] = (aggregate.timeByCategory[cat] ?? 0) + seconds;
+
+      const issueKey = row.jiraIssueKey;
+      if (issueKey && issueMetadata.has(issueKey)) {
+        const meta = issueMetadata.get(issueKey)!;
+        aggregate.timeByType[meta.type] = (aggregate.timeByType[meta.type] ?? 0) + seconds;
+        aggregate.timeByProject[meta.project] = (aggregate.timeByProject[meta.project] ?? 0) + seconds;
+      } else if (issueKey) {
+        aggregate.timeByType["Unknown"] = (aggregate.timeByType["Unknown"] ?? 0) + seconds;
+        aggregate.timeByProject["Unknown"] = (aggregate.timeByProject["Unknown"] ?? 0) + seconds;
+      } else {
+        const isBitbucket = isBitbucketEntry(row);
+        let sourceLabel = "Unknown";
+        if (row.source) {
+          sourceLabel = row.source.charAt(0).toUpperCase() + row.source.slice(1);
+        } else if (isBitbucket) {
+          sourceLabel = "Bitbucket";
+        }
+
+        const typeLabel = isBitbucket ? BITBUCKET_TYPE_LABEL : "Unknown";
+
+        aggregate.timeByType[typeLabel] = (aggregate.timeByType[typeLabel] ?? 0) + seconds;
+        aggregate.timeByProject[sourceLabel] = (aggregate.timeByProject[sourceLabel] ?? 0) + seconds;
+      }
     }
   }
 

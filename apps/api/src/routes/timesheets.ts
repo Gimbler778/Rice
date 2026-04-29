@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { db } from "@/db/client";
 import {
+  account,
   entryCategories,
   entrySources,
   entryStatuses,
@@ -126,6 +127,7 @@ function buildCopySignature(entry: {
   jiraIssueKey: string | null;
   source: string | null;
   sourceLink: string | null;
+  atlassianName?: string | null;
   hours: number;
 }) {
   return [
@@ -134,6 +136,7 @@ function buildCopySignature(entry: {
     entry.jiraIssueKey ?? "",
     entry.source ?? "",
     entry.sourceLink ?? "",
+    entry.atlassianName ?? "",
     entry.hours.toFixed(2),
     (entry as any).timeRemaining?.toFixed(2) ?? "0.00",
   ].join("|");
@@ -256,6 +259,36 @@ router.post("/timesheets/entries", async (req, res) => {
     );
   }
 
+  let atlassianName: string | null = null;
+  const { data: atlassianAccounts } = await tryCatch(
+    db
+      .select({ accessToken: account.accessToken })
+      .from(account)
+      .where(
+        and(
+          eq(account.userId, sessionResult.userId),
+          eq(account.providerId, "atlassian")
+        )
+      )
+      .limit(1)
+  );
+
+  if (atlassianAccounts && atlassianAccounts.length > 0 && atlassianAccounts[0].accessToken) {
+    try {
+      const meRes = await fetch("https://api.atlassian.com/me", {
+        headers: { Authorization: `Bearer ${atlassianAccounts[0].accessToken}` },
+      });
+      if (meRes.ok) {
+        const meData = await meRes.json() as { name?: string };
+        if (meData.name) {
+          atlassianName = meData.name;
+        }
+      }
+    } catch (e) {
+      // Ignore if it fails
+    }
+  }
+
   const { data: createdEntries, error } = await tryCatch(
     db
       .insert(timesheetEntry)
@@ -270,6 +303,7 @@ router.post("/timesheets/entries", async (req, res) => {
         sourceLink: parsedBody.data.sourceLink,
         hours: parsedBody.data.hours,
         timeRemaining: parsedBody.data.timeRemaining,
+        atlassianName,
         status: parsedBody.data.status ?? "in-progress",
       })
       .returning(),
@@ -441,6 +475,7 @@ router.post("/timesheets/copy-yesterday", async (req, res) => {
         jiraIssueKey: timesheetEntry.jiraIssueKey,
         source: timesheetEntry.source,
         sourceLink: timesheetEntry.sourceLink,
+        atlassianName: timesheetEntry.atlassianName,
         hours: timesheetEntry.hours,
         timeRemaining: timesheetEntry.timeRemaining,
       })
@@ -471,6 +506,7 @@ router.post("/timesheets/copy-yesterday", async (req, res) => {
       jiraIssueKey: entry.jiraIssueKey,
       source: entry.source,
       sourceLink: entry.sourceLink,
+      atlassianName: entry.atlassianName,
       hours: entry.hours,
       timeRemaining: entry.timeRemaining,
       status: "in-progress" as const,

@@ -1,0 +1,1 @@
+ALTER TABLE "timesheet_entry" ADD COLUMN "atlassian_name" text;

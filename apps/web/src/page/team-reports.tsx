@@ -49,6 +49,7 @@ const TYPE_COLORS: Record<string, string> = {
   Task: "var(--chart-2)",
   "Sub-task": "var(--chart-4)",
   Epic: "var(--chart-5)",
+  "Bitbucket items (PRs/Commits/Merges)": "var(--chart-3)",
   Unknown: "var(--muted-foreground)",
 };
 
