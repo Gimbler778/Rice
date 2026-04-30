@@ -88,6 +88,7 @@ export const auth = betterAuth({
       enabled: true,
       trustedProviders: ["atlassian", "bitbucket", "email-password"],
     },
+    skipStateCookieCheck: true,
   },
   hooks: {
     after: createAuthMiddleware(async (ctx) => {
