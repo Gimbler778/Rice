@@ -1264,6 +1264,16 @@ function isBitbucketEntry(row: { source: string | null; sourceLink?: string | nu
   return Boolean(row.sourceLink && /bitbucket\.org/i.test(row.sourceLink));
 }
 
+function resolveWorkspaceLabel(sourceLink?: string | null): string | null {
+  if (!sourceLink) return null;
+  try {
+    const hostname = new URL(sourceLink).hostname;
+    return hostname || null;
+  } catch {
+    return null;
+  }
+}
+
 function padIsoPart(value: number) {
   return String(value).padStart(2, "0");
 }
@@ -1574,6 +1584,7 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
         category: timesheetEntry.category,
         jiraIssueKey: timesheetEntry.jiraIssueKey,
         source: timesheetEntry.source,
+        sourceLink: timesheetEntry.sourceLink,
         description: timesheetEntry.description,
         atlassianName: timesheetEntry.atlassianName,
       })
@@ -1622,7 +1633,10 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
         aggregate.timeByProject[meta.project] = (aggregate.timeByProject[meta.project] ?? 0) + seconds;
       } else if (issueKey) {
         aggregate.timeByType["Unknown"] = (aggregate.timeByType["Unknown"] ?? 0) + seconds;
-        aggregate.timeByProject["Unknown"] = (aggregate.timeByProject["Unknown"] ?? 0) + seconds;
+        const fallbackProject =
+          resolveWorkspaceLabel(row.sourceLink) ?? "Other workspaces";
+        aggregate.timeByProject[fallbackProject] =
+          (aggregate.timeByProject[fallbackProject] ?? 0) + seconds;
       } else {
         const isBitbucket = isBitbucketEntry(row);
         let sourceLabel = "Unknown";
@@ -1630,12 +1644,15 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
           sourceLabel = row.source.charAt(0).toUpperCase() + row.source.slice(1);
         } else if (isBitbucket) {
           sourceLabel = "Bitbucket";
+        } else {
+          sourceLabel = resolveWorkspaceLabel(row.sourceLink) ?? "Other workspaces";
         }
 
         const typeLabel = isBitbucket ? BITBUCKET_TYPE_LABEL : "Unknown";
 
         aggregate.timeByType[typeLabel] = (aggregate.timeByType[typeLabel] ?? 0) + seconds;
-        aggregate.timeByProject[sourceLabel] = (aggregate.timeByProject[sourceLabel] ?? 0) + seconds;
+        aggregate.timeByProject[sourceLabel] =
+          (aggregate.timeByProject[sourceLabel] ?? 0) + seconds;
       }
     }
   }
