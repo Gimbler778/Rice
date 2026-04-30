@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { Check, Pencil, Plus, X } from "lucide-react";
+import { Check, Pencil, Plus, X, Trash2 } from "lucide-react";
 
 import type { AdminCategory } from "../types";
 import { SectionHeader } from "../ui";
@@ -15,6 +15,7 @@ type CategoriesTabProps = {
   onToggleCategory: (id: string) => void;
   onRenameCategory: (id: string, name: string) => void;
   onAddCategory: (name: string) => void;
+  onDeleteCategory: (id: string) => void;
 };
 
 export function CategoriesTab({
@@ -22,6 +23,7 @@ export function CategoriesTab({
   onToggleCategory,
   onRenameCategory,
   onAddCategory,
+  onDeleteCategory,
 }: CategoriesTabProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -193,15 +195,27 @@ export function CategoriesTab({
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-7"
-                        onClick={() => handleStartEdit(category)}
-                        disabled={!category.isEnabled}
-                      >
-                        <Pencil className="size-3" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7"
+                          onClick={() => handleStartEdit(category)}
+                          disabled={!category.isEnabled}
+                        >
+                          <Pencil className="size-3" />
+                        </Button>
+                        {!category.isDefault && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7 hover:text-destructive"
+                            onClick={() => onDeleteCategory(category.id)}
+                          >
+                            <Trash2 className="size-3" />
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </td>
                 </tr>
