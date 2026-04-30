@@ -26,7 +26,6 @@ app.use(
 
 app.all("/api/auth/{*any}", toNodeHandler(auth));
 
-// Request/response logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   logger.info({ method: req.method, url: req.originalUrl }, "Request received");
@@ -68,5 +67,6 @@ app.get("/health", (_req, res) => {
 });
 
 app.listen(env.PORT, () => {
+  logger.info(`DATABASE URL: ${env.DATABASE_URL}`)
   logger.info(`API running on http://localhost:${env.PORT}`);
 });
