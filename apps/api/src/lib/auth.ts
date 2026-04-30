@@ -1,11 +1,31 @@
 import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { genericOAuth } from "better-auth/plugins";
 
 import { db } from "@/db/client";
 import { env } from "@/lib/env";
+import logger from "@/lib/logger";
 import { sendPasswordResetEmail, sendVerificationEmail } from "@/lib/mail";
 import * as schema from "@/db/schema/index";
+
+type AuthErrorResponse = {
+  status: number;
+  message: string;
+  code?: string;
+};
+
+function isAuthErrorResponse(value: unknown): value is AuthErrorResponse {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    typeof record.status === "number" && typeof record.message === "string"
+  );
+}
 
 export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
@@ -62,6 +82,29 @@ export const auth = betterAuth({
       trustedProviders: ["atlassian", "bitbucket", "email-password"],
     },
   },
+  hooks: {
+    after: createAuthMiddleware(async (ctx) => {
+      const returned = ctx.context.returned;
+
+      if (!isAuthErrorResponse(returned)) {
+        return;
+      }
+
+      logger.error(
+        {
+          path: ctx.path,
+          status: returned.status,
+          code: returned.code,
+          message: returned.message,
+        },
+        "Auth error",
+      );
+
+      throw new APIError("BAD_REQUEST", {
+        message: "Authentication failed",
+      });
+    }),
+  },
   plugins: [
     genericOAuth({
       config: [
@@ -74,12 +117,7 @@ export const auth = betterAuth({
           userInfoUrl: "https://api.bitbucket.org/2.0/user",
           redirectURI: env.BITBUCKET_OAUTH_REDIRECT_URI,
           authentication: "basic",
-          scopes: [
-            "account",
-            "email",
-            "repository",
-            "pullrequest",
-          ],
+          scopes: ["account", "email", "repository", "pullrequest"],
           disableSignUp: true,
           getUserInfo: async (tokens) => {
             const profileResponse = await fetch(

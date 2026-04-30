@@ -30,18 +30,7 @@ function assertNoAuthError(response: unknown): void {
   }
 
   if ("error" in response && response.error) {
-    const errorValue = response.error;
-    const message =
-      typeof errorValue === "string"
-        ? errorValue
-        : typeof errorValue === "object" &&
-            errorValue &&
-            "message" in errorValue &&
-            typeof errorValue.message === "string"
-          ? errorValue.message
-          : "Authentication failed";
-
-    throw new Error(message);
+    throw new Error("Authentication failed");
   }
 }
 
