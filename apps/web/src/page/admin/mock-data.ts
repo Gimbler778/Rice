@@ -27,8 +27,8 @@ export const MOCK_USERS: AdminUser[] = [
 ];
 
 export const MOCK_TEAMS: AdminTeam[] = [
-  { id: "t1", name: "RICE Squad", memberIds: ["u1", "u2", "u3", "u4"], projects: ["RICE", "Internal tools"] },
-  { id: "t2", name: "Platform team", memberIds: ["u1"], projects: ["Infra"] },
+  { id: "t1", name: "RICE Squad", memberIds: ["u1", "u2", "u3", "u4"], projects: ["RICE", "Internal tools"], managerId: "u2" },
+  { id: "t2", name: "Platform team", memberIds: ["u1"], projects: ["Infra"], managerId: "u1" },
 ];
 
 

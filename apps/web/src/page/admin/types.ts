@@ -23,6 +23,7 @@ export interface AdminTeam {
   name: string;
   memberIds: string[];
   projects: string[];
+  managerId?: string | null;
 }
 
 

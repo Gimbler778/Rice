@@ -9,6 +9,7 @@ import { env } from "@/lib/env";
 import integrationsRouter from "./routes/integrations";
 import learningRouter from "./routes/learning";
 import timesheetsRouter from "./routes/timesheets";
+import adminRouter from "./routes/admin";
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use(express.json());
 app.use("/api", timesheetsRouter);
 app.use("/api/integrations", integrationsRouter);
 app.use("/api", learningRouter);
+app.use("/api/admin", adminRouter);
 
 app.get("/health", (_req, res) => {
   return sendSuccess(res, RESPONSE_CODE.OK, "Health check passed", {

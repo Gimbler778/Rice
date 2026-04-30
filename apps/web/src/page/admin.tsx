@@ -1,21 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { GitBranch, Settings, Tag, Users } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
-
 import {
-  MOCK_CATEGORIES,
-  MOCK_POLICY,
-  MOCK_TEAMS,
-  MOCK_USERS,
-} from "./admin/mock-data";
+  createAdminProject,
+  createAdminTeam,
+  deleteAdminTeam,
+  fetchAdminTeams,
+  fetchAdminUsers,
+  updateAdminTeam,
+  updateAdminUserRole,
+} from "@/api/admin-api";
+
+import { MOCK_CATEGORIES, MOCK_POLICY } from "./admin/mock-data";
 import { CategoriesTab } from "./admin/tabs/categories-tab";
 
 import { PolicyTab } from "./admin/tabs/policy-tab";
 import { TeamsTab } from "./admin/tabs/teams-tab";
 import { UsersTab } from "./admin/tabs/users-tab";
-import type { AdminTab, UserRole } from "./admin/types";
+import type { AdminTab, AdminTeam, AdminUser, UserRole } from "./admin/types";
 import { TabButton } from "./admin/ui";
 
 const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
@@ -29,8 +33,35 @@ export function AdminPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>("categories");
 
   const [categories, setCategories] = useState(MOCK_CATEGORIES);
-  const [users, setUsers] = useState(MOCK_USERS);
-  const [teams, setTeams] = useState(MOCK_TEAMS);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+
+  const [teams, setTeams] = useState<AdminTeam[]>([]);
+
+  const loadUsers = async () => {
+    const fetchedUsers = await fetchAdminUsers();
+    setUsers(
+      fetchedUsers.map((user) => ({
+        ...user,
+        avatarInitials: user.name
+          .split(" ")
+          .map((part) => part[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase(),
+        lastActive: "Unknown",
+      })),
+    );
+  };
+
+  const loadTeams = async () => {
+    const fetchedTeams = await fetchAdminTeams();
+    setTeams(fetchedTeams);
+  };
+
+  useEffect(() => {
+    loadUsers().catch((error) => console.error("Failed to fetch admin users", error));
+    loadTeams().catch((error) => console.error("Failed to fetch admin teams", error));
+  }, []);
 
   const [policy, setPolicy] = useState(MOCK_POLICY);
 
@@ -69,54 +100,52 @@ export function AdminPage() {
   };
 
   const handleRoleChange = (userId: string, newRole: UserRole) => {
-    setUsers((prev) => {
-      const targetUser = prev.find((user) => user.id === userId);
-      if (!targetUser) {
-        return prev;
-      }
+    const previousUsers = users;
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)));
 
-      const adminCount = prev.filter((user) => user.role === "admin").length;
-      if (
-        targetUser.role === "admin" &&
-        newRole !== "admin" &&
-        adminCount <= 1
-      ) {
-        return prev;
-      }
-
-      return prev.map((user) =>
-        user.id === userId ? { ...user, role: newRole } : user,
-      );
-    });
+    updateAdminUserRole(userId, newRole)
+      .catch((error) => {
+        console.error("Failed to update role", error);
+        setUsers(previousUsers);
+      })
+      .then(() => loadUsers().catch((error) => console.error("Failed to reload users", error)));
   };
 
-  const handleAddTeam = (name: string) => {
-    setTeams((prev) => [
-      ...prev,
-      { id: `t-${Date.now()}`, name, memberIds: [], projects: [] },
-    ]);
+  const handleAddTeam = (name: string, managerId?: string | null) => {
+    if (!managerId) {
+      return;
+    }
+
+    createAdminTeam({ name, managerId, memberIds: [managerId] })
+      .then(() => loadTeams().catch((error) => console.error("Failed to reload teams", error)))
+      .catch((error) => console.error("Failed to create team", error));
   };
 
   const handleDeleteTeam = (id: string) => {
-    setTeams((prev) => prev.filter((team) => team.id !== id));
+    deleteAdminTeam(id)
+      .then(() => loadTeams().catch((error) => console.error("Failed to reload teams", error)))
+      .catch((error) => console.error("Failed to delete team", error));
   };
 
   const handleToggleMember = (teamId: string, userId: string) => {
-    setTeams((prev) =>
-      prev.map((team) => {
-        if (team.id !== teamId) {
-          return team;
-        }
+    const team = teams.find((item) => item.id === teamId);
+    if (!team) {
+      return;
+    }
 
-        const hasMember = team.memberIds.includes(userId);
-        return {
-          ...team,
-          memberIds: hasMember
-            ? team.memberIds.filter((id) => id !== userId)
-            : [...team.memberIds, userId],
-        };
-      }),
-    );
+    const nextMemberIds = team.memberIds.includes(userId)
+      ? team.memberIds.filter((id) => id !== userId)
+      : [...team.memberIds, userId];
+
+    updateAdminTeam(teamId, { memberIds: nextMemberIds })
+      .then(() => loadTeams().catch((error) => console.error("Failed to reload teams", error)))
+      .catch((error) => console.error("Failed to update team members", error));
+  };
+
+  const handleAddProject = (teamId: string, name: string) => {
+    createAdminProject(teamId, name)
+      .then(() => loadTeams().catch((error) => console.error("Failed to reload teams", error)))
+      .catch((error) => console.error("Failed to create project", error));
   };
 
 
@@ -177,6 +206,7 @@ export function AdminPage() {
             onAddTeam={handleAddTeam}
             onDeleteTeam={handleDeleteTeam}
             onToggleMember={handleToggleMember}
+            onAddProject={handleAddProject}
           />
         )}
 
