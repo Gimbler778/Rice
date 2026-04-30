@@ -125,10 +125,42 @@ export async function resolveJiraResources(accessToken: string) {
     );
 }
 
-export async function fetchAllJiraIssues(accessToken: string, cloudId: string) {
+export async function fetchCurrentJiraUser(
+  accessToken: string,
+  cloudId: string,
+): Promise<string | null> {
+  const response = await fetch(
+    `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/myself`,
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = (await response.json()) as { accountId?: string };
+  return data.accountId ?? null;
+}
+
+export async function fetchAllJiraIssues(
+  accessToken: string,
+  cloudId: string,
+  currentUserAccountId?: string | null,
+) {
   const issueTable = new Map<string, JiraIssueRecord>();
   const pageSize = 100;
-  const boundedJql = "updated >= -90d ORDER BY updated DESC";
+  // If we know the current user's accountId, only fetch:
+  //   - issues assigned to them, OR
+  //   - issues with no assignee (visible to all)
+  // This prevents other devs' assigned issues from appearing as suggestions.
+  const boundedJql = currentUserAccountId
+    ? `(assignee = "${currentUserAccountId}" OR assignee is EMPTY) AND updated >= -90d ORDER BY updated DESC`
+    : "updated >= -90d ORDER BY updated DESC";
   let nextPageToken: string | undefined;
 
   while (true) {

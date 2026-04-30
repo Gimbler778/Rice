@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import {
   fetchAllJiraIssues,
+  fetchCurrentJiraUser,
   isAtlassianUnauthorizedError,
   resolveJiraResources,
 } from "@/lib/jira";
@@ -393,8 +394,20 @@ async function fetchAtlassianEntriesWithRefresh(
     }
   }
 
-  const runJiraFetch = async () => fetchJiraEntries(atlassianAccessToken);
-  let jiraResult = await tryCatch(runJiraFetch());
+  
+  
+  const jiraResources = await resolveJiraResources(atlassianAccessToken).catch(() => []);
+  let currentUserAccountId: string | null = null;
+  if (jiraResources.length > 0) {
+    const { data: accountId } = await tryCatch(
+      fetchCurrentJiraUser(atlassianAccessToken, jiraResources[0].cloudId),
+    );
+    currentUserAccountId = accountId ?? null;
+    logger.info({ userId, jiraAccountId: currentUserAccountId }, "Resolved Jira accountId for user");
+  }
+
+  const runJiraFetch = async (token: string) => fetchJiraEntries(token, currentUserAccountId);
+  let jiraResult = await tryCatch(runJiraFetch(atlassianAccessToken));
 
   if (
     jiraResult.error &&
@@ -419,7 +432,7 @@ async function fetchAtlassianEntriesWithRefresh(
         );
       }
 
-      jiraResult = await tryCatch(runJiraFetch());
+      jiraResult = await tryCatch(runJiraFetch(atlassianAccessToken));
     } else {
       logger.warn(
         { err: refreshError, userId },
@@ -674,7 +687,10 @@ async function refreshBitbucketAccessToken(refreshToken: string) {
   return tokenPayload.access_token;
 }
 
-async function fetchJiraEntries(accessToken: string): Promise<DashboardEntry[]> {
+async function fetchJiraEntries(
+  accessToken: string,
+  currentUserAccountId?: string | null,
+): Promise<DashboardEntry[]> {
   const jiraResources = await resolveJiraResources(accessToken);
 
   if (!jiraResources.length) {
@@ -685,7 +701,7 @@ async function fetchJiraEntries(accessToken: string): Promise<DashboardEntry[]> 
 
   for (const { cloudId, jiraSiteUrl } of jiraResources) {
     try {
-      const { issues } = await fetchAllJiraIssues(accessToken, cloudId);
+      const { issues } = await fetchAllJiraIssues(accessToken, cloudId, currentUserAccountId);
 
       for (const issue of issues) {
         const timeSeconds = issue.timeSpentSeconds;
