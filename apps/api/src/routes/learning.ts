@@ -20,35 +20,21 @@ const upsertLearningSchema = z.object({
   tag: z.enum(learningTags).optional().nullable(),
 });
 
-function toWebHeaders(
-  headers: Record<string, string | string[] | undefined>,
-): Headers {
-  const webHeaders = new Headers();
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value === "string") {
-      webHeaders.set(key, value);
-    } else if (Array.isArray(value)) {
-      webHeaders.set(key, value.join(", "));
+async function resolveSessionUserId(req: any) {
+  try {
+    const session = await auth.api.getSession({
+      headers: req.headers,
+    });
+
+    if (!session?.user?.id) {
+      return { ok: false, code: RESPONSE_CODE.UNAUTHORIZED, message: "Unauthorized", userId: null } as const;
     }
-  }
-  return webHeaders;
-}
 
-async function resolveSessionUserId(reqHeaders: Record<string, string | string[] | undefined>) {
-  const { data: session, error } = await tryCatch(
-    auth.api.getSession({ headers: toWebHeaders(reqHeaders) }),
-  );
-
-  if (error) {
+    return { ok: true, userId: session.user.id } as const;
+  } catch (error) {
     logger.error({ err: error }, "Failed to resolve auth session");
     return { ok: false, code: RESPONSE_CODE.INTERNAL_SERVER_ERROR, message: "Failed to resolve auth session", userId: null } as const;
   }
-
-  if (!session?.user?.id) {
-    return { ok: false, code: RESPONSE_CODE.UNAUTHORIZED, message: "Unauthorized", userId: null } as const;
-  }
-
-  return { ok: true, userId: session.user.id } as const;
 }
 
 /**
@@ -110,7 +96,7 @@ function toIsoDate(date: Date): string {
 
 // GET /api/learning/:date
 router.get("/:date", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
   }
@@ -146,7 +132,7 @@ router.get("/:date", async (req, res) => {
 
 // PUT /api/learning/:date  — upsert
 router.put("/:date", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
   }

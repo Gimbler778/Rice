@@ -7,7 +7,6 @@ import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import {
   fetchAllJiraIssues,
-  fetchCurrentJiraUser,
   isAtlassianUnauthorizedError,
   resolveJiraResources,
 } from "@/lib/jira";
@@ -144,41 +143,22 @@ function isBitbucketInvalidRefreshTokenError(error: unknown) {
   return false;
 }
 
-function toWebHeaders(
-  headers: Record<string, string | string[] | undefined>,
-): Headers {
-  const webHeaders = new Headers();
+async function resolveSessionUserId(req: any) {
+  try {
+    const session = await auth.api.getSession({
+      headers: req.headers,
+    });
 
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value === "string") {
-      webHeaders.set(key, value);
-      continue;
-    }
-
-    if (Array.isArray(value)) {
-      webHeaders.set(key, value.join(", "));
-    }
-  }
-
-  return webHeaders;
-}
-
-async function resolveSessionUserId(reqHeaders: Record<string, string | string[] | undefined>) {
-  const { data: session, error: sessionError } = await tryCatch(
-    auth.api.getSession({ headers: toWebHeaders(reqHeaders) }),
-  );
-
-  if (sessionError) {
+    return {
+      userId: session?.user?.id ?? null,
+      error: null,
+    };
+  } catch (error) {
     return {
       userId: null,
-      error: sessionError,
+      error,
     };
   }
-
-  return {
-    userId: session?.user?.id ?? null,
-    error: null,
-  };
 }
 
 async function fetchConnectedAccounts(userId: string) {
@@ -196,9 +176,9 @@ async function fetchConnectedAccounts(userId: string) {
 }
 
 async function resolveRequestAccounts(
-  reqHeaders: Record<string, string | string[] | undefined>,
+  req: any,
 ): Promise<RequestAccountsResult> {
-  const { userId, error: sessionError } = await resolveSessionUserId(reqHeaders);
+  const { userId, error: sessionError } = await resolveSessionUserId(req);
 
   if (sessionError) {
     logger.error({ err: sessionError }, "Failed to resolve auth session");
@@ -449,20 +429,8 @@ async function fetchAtlassianEntriesWithRefresh(
     }
   }
 
-  
-  
-  const jiraResources = await resolveJiraResources(atlassianAccessToken).catch(() => []);
-  let currentUserAccountId: string | null = null;
-  if (jiraResources.length > 0) {
-    const { data: accountId } = await tryCatch(
-      fetchCurrentJiraUser(atlassianAccessToken, jiraResources[0].cloudId),
-    );
-    currentUserAccountId = accountId ?? null;
-    logger.info({ userId, jiraAccountId: currentUserAccountId }, "Resolved Jira accountId for user");
-  }
-
-  const runJiraFetch = async (token: string) => fetchJiraEntries(token, currentUserAccountId);
-  let jiraResult = await tryCatch(runJiraFetch(atlassianAccessToken));
+  const runJiraFetch = async () => fetchJiraEntries(atlassianAccessToken);
+  let jiraResult = await tryCatch(runJiraFetch());
 
   if (
     jiraResult.error &&
@@ -487,7 +455,7 @@ async function fetchAtlassianEntriesWithRefresh(
         );
       }
 
-      jiraResult = await tryCatch(runJiraFetch(atlassianAccessToken));
+      jiraResult = await tryCatch(runJiraFetch());
     } else {
       logger.warn(
         { err: refreshError, userId },
@@ -799,10 +767,7 @@ async function refreshBitbucketAccessToken(refreshToken: string) {
   return tokenPayload.access_token;
 }
 
-async function fetchJiraEntries(
-  accessToken: string,
-  currentUserAccountId?: string | null,
-): Promise<DashboardEntry[]> {
+async function fetchJiraEntries(accessToken: string): Promise<DashboardEntry[]> {
   const jiraResources = await resolveJiraResources(accessToken);
 
   if (!jiraResources.length) {
@@ -813,7 +778,7 @@ async function fetchJiraEntries(
 
   for (const { cloudId, jiraSiteUrl } of jiraResources) {
     try {
-      const { issues } = await fetchAllJiraIssues(accessToken, cloudId, currentUserAccountId);
+      const { issues } = await fetchAllJiraIssues(accessToken, cloudId);
 
       for (const issue of issues) {
         const timeSeconds = issue.timeSpentSeconds;
@@ -1242,7 +1207,7 @@ async function fetchBitbucketEntries(
 }
 
 router.get("/status", async (req, res) => {
-  const requestAccounts = await resolveRequestAccounts(req.headers);
+  const requestAccounts = await resolveRequestAccounts(req);
 
   if (!requestAccounts.ok) {
     return sendError(
@@ -1270,7 +1235,7 @@ router.get("/status", async (req, res) => {
 });
 
 router.get("/timesheet", async (req, res) => {
-  const requestAccounts = await resolveRequestAccounts(req.headers);
+  const requestAccounts = await resolveRequestAccounts(req);
 
   if (!requestAccounts.ok) {
     return sendError(
@@ -1392,16 +1357,6 @@ function isBitbucketEntry(row: { source: string | null; sourceLink?: string | nu
   return Boolean(row.sourceLink && /bitbucket\.org/i.test(row.sourceLink));
 }
 
-function resolveWorkspaceLabel(sourceLink?: string | null): string | null {
-  if (!sourceLink) return null;
-  try {
-    const hostname = new URL(sourceLink).hostname;
-    return hostname || null;
-  } catch {
-    return null;
-  }
-}
-
 function padIsoPart(value: number) {
   return String(value).padStart(2, "0");
 }
@@ -1439,7 +1394,7 @@ const BITBUCKET_TYPE_LABEL = "Bitbucket items (PRs/Commits/Merges)";
 
 
 router.get("/teams", async (req, res) => {
-  const requestAccounts = await resolveRequestAccounts(req.headers);
+  const requestAccounts = await resolveRequestAccounts(req);
 
   if (!requestAccounts.ok) {
     return sendError(res, requestAccounts.code, requestAccounts.message);
@@ -1516,7 +1471,7 @@ router.get("/teams", async (req, res) => {
 /** team report aggregation **/
 router.get("/team-report/:teamId", async (req, res) => {
   const { teamId } = req.params; // we use teamId as cloudId
-  const requestAccounts = await resolveRequestAccounts(req.headers);
+  const requestAccounts = await resolveRequestAccounts(req);
 
   if (!requestAccounts.ok) {
     return sendError(res, requestAccounts.code, requestAccounts.message);
@@ -1712,7 +1667,6 @@ router.get("/team-report/:teamId", async (req, res) => {
         category: timesheetEntry.category,
         jiraIssueKey: timesheetEntry.jiraIssueKey,
         source: timesheetEntry.source,
-        sourceLink: timesheetEntry.sourceLink,
         description: timesheetEntry.description,
         atlassianName: timesheetEntry.atlassianName,
       })
@@ -1761,10 +1715,7 @@ router.get("/team-report/:teamId", async (req, res) => {
         aggregate.timeByProject[meta.project] = (aggregate.timeByProject[meta.project] ?? 0) + seconds;
       } else if (issueKey) {
         aggregate.timeByType["Unknown"] = (aggregate.timeByType["Unknown"] ?? 0) + seconds;
-        const fallbackProject =
-          resolveWorkspaceLabel(row.sourceLink) ?? "Other workspaces";
-        aggregate.timeByProject[fallbackProject] =
-          (aggregate.timeByProject[fallbackProject] ?? 0) + seconds;
+        aggregate.timeByProject["Unknown"] = (aggregate.timeByProject["Unknown"] ?? 0) + seconds;
       } else {
         const isBitbucket = isBitbucketEntry(row);
         let sourceLabel = "Unknown";
@@ -1772,15 +1723,12 @@ router.get("/team-report/:teamId", async (req, res) => {
           sourceLabel = row.source.charAt(0).toUpperCase() + row.source.slice(1);
         } else if (isBitbucket) {
           sourceLabel = "Bitbucket";
-        } else {
-          sourceLabel = resolveWorkspaceLabel(row.sourceLink) ?? "Other workspaces";
         }
 
         const typeLabel = isBitbucket ? BITBUCKET_TYPE_LABEL : "Unknown";
 
         aggregate.timeByType[typeLabel] = (aggregate.timeByType[typeLabel] ?? 0) + seconds;
-        aggregate.timeByProject[sourceLabel] =
-          (aggregate.timeByProject[sourceLabel] ?? 0) + seconds;
+        aggregate.timeByProject[sourceLabel] = (aggregate.timeByProject[sourceLabel] ?? 0) + seconds;
       }
     }
   }

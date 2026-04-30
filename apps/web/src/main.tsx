@@ -57,6 +57,9 @@ const ReportsPage = lazy(async () => ({
 const TeamReportsPage = lazy(async () => ({
   default: (await import("@/page/team-reports")).TeamReportsPage,
 }));
+const ManagerApprovalsPage = lazy(async () => ({
+  default: (await import("@/page/manager-approvals")).default,
+}));
 const NotFoundPage = () => {
   return (
     <PageContainer className="min-h-screen min-w-screen flex justify-center items-center gap-5 text-4xl">
@@ -125,6 +128,13 @@ createRoot(document.getElementById("root")!).render(
                     <Route path="profile" element={<ProfilePage />} />
                     <Route path="admin" element={<AdminPage />} />
                     <Route path="reports" element={<ReportsPage />} />
+                    <Route
+                      element={
+                        <RouteProtector allowedRoles={["manager", "admin"]} />
+                      }
+                    >
+                      <Route path="approvals" element={<ManagerApprovalsPage />} />
+                    </Route>
                     <Route
                       element={
                         <RouteProtector allowedRoles={["manager", "admin"]} />

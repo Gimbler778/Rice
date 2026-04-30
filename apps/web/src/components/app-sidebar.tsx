@@ -8,6 +8,7 @@ import {
   User,
   History,
 } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -68,6 +69,13 @@ const reportsNav = [
     href: "/reports/team",
     icon: BarChart3,
     // Only managers and admins see team view
+    roles: ["manager", "admin"] as AppRole[],
+  },
+  {
+    label: "Approvals",
+    href: "/approvals",
+    icon: CheckCircle,
+    // Only managers and admins see approvals
     roles: ["manager", "admin"] as AppRole[],
   },
 ];

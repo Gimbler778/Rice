@@ -1,8 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { fetchCategories, createCategory, updateCategory, deleteCategory } from "@/api/categories-api";
 import { GitBranch, Settings, Tag, Users } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
@@ -16,7 +13,7 @@ import {
   updateAdminUserRole,
 } from "@/api/admin-api";
 
-import { MOCK_POLICY } from "./admin/mock-data";
+import { MOCK_CATEGORIES, MOCK_POLICY } from "./admin/mock-data";
 import { CategoriesTab } from "./admin/tabs/categories-tab";
 
 import { PolicyTab } from "./admin/tabs/policy-tab";
@@ -32,114 +29,78 @@ const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
   { id: "policy", label: "Policy", icon: Settings },
 ];
 
-function getInitials(name: string) {
-  const parts = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (!parts.length) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-}
-
 export function AdminPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>("categories");
 
-  const queryClient = useQueryClient();
-
-  const { data: categoriesData } = useQuery({
-    queryKey: ["categories"],
-    queryFn: fetchCategories,
-  });
-  const categories = categoriesData?.categories || [];
-
-  const updateCategoryMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: any }) => updateCategory(id, updates),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-    },
-    onError: () => {
-      toast.error("Failed to update category");
-    },
-  });
-
-  const createCategoryMutation = useMutation({
-    mutationFn: (name: string) => createCategory({ name }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-    },
-    onError: () => {
-      toast.error("Failed to create category");
-    },
-  });
-
-  const deleteCategoryMutation = useMutation({
-    mutationFn: (id: string) => deleteCategory(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-    },
-    onError: () => {
-      toast.error("Failed to delete category");
-    },
-  });
-
+  const [categories, setCategories] = useState(MOCK_CATEGORIES);
   const [users, setUsers] = useState<AdminUser[]>([]);
+
   const [teams, setTeams] = useState<AdminTeam[]>([]);
+
+  const loadUsers = async () => {
+    const fetchedUsers = await fetchAdminUsers();
+    setUsers(
+      fetchedUsers.map((user) => ({
+        ...user,
+        avatarInitials: user.name
+          .split(" ")
+          .map((part) => part[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase(),
+        lastActive: "Unknown",
+      })),
+    );
+  };
+
+  const loadTeams = async () => {
+    const fetchedTeams = await fetchAdminTeams();
+    setTeams(fetchedTeams);
+  };
+
+  useEffect(() => {
+    loadUsers().catch((error) => console.error("Failed to fetch admin users", error));
+    loadTeams().catch((error) => console.error("Failed to fetch admin teams", error));
+  }, []);
 
   const [policy, setPolicy] = useState(MOCK_POLICY);
 
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id ?? null;
 
-  const loadUsers = useCallback(async () => {
-    try {
-      const apiUsers = await fetchAdminUsers();
-      setUsers(
-        apiUsers.map((user) => ({
-          ...user,
-          avatarInitials: getInitials(user.name),
-          lastActive: "-",
-          isCurrentUser: user.id === currentUserId,
-        })),
-      );
-    } catch (error) {
-      console.error("Failed to load users", error);
-      toast.error("Failed to load users");
-    }
-  }, [currentUserId]);
-
-  const loadTeams = useCallback(async () => {
-    try {
-      const apiTeams = await fetchAdminTeams();
-      setTeams(apiTeams);
-    } catch (error) {
-      console.error("Failed to load teams", error);
-      toast.error("Failed to load teams");
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadUsers();
-    void loadTeams();
-  }, [loadUsers, loadTeams]);
-
   const handleToggleCategory = (id: string) => {
-    const category = categories.find((c) => c.id === id);
-    if (!category) return;
-    updateCategoryMutation.mutate({ id, updates: { isEnabled: !category.isEnabled } });
+    setCategories((prev) =>
+      prev.map((category) =>
+        category.id === id
+          ? { ...category, isEnabled: !category.isEnabled }
+          : category,
+      ),
+    );
   };
 
   const handleRenameCategory = (id: string, name: string) => {
-    updateCategoryMutation.mutate({ id, updates: { name } });
+    setCategories((prev) =>
+      prev.map((category) =>
+        category.id === id ? { ...category, name } : category,
+      ),
+    );
   };
 
   const handleAddCategory = (name: string) => {
-    createCategoryMutation.mutate(name);
+    setCategories((prev) => [
+      ...prev,
+      {
+        id: `cat-${Date.now()}`,
+        name,
+        color: "bg-zinc-400",
+        isDefault: false,
+        isEnabled: true,
+      },
+    ]);
   };
 
   const handleDeleteCategory = (id: string) => {
-    deleteCategoryMutation.mutate(id);
+    setCategories((prev) => prev.filter((category) => category.id !== id));
   };
 
   const handleRoleChange = (userId: string, newRole: UserRole) => {
@@ -151,9 +112,7 @@ export function AdminPage() {
         console.error("Failed to update role", error);
         setUsers(previousUsers);
       })
-      .finally(() => {
-        void loadUsers();
-      });
+      .then(() => loadUsers().catch((error) => console.error("Failed to reload users", error)));
   };
 
   const handleAddTeam = (name: string, managerId?: string | null) => {
@@ -162,13 +121,13 @@ export function AdminPage() {
     }
 
     createAdminTeam({ name, managerId, memberIds: [managerId] })
-      .then(() => loadTeams())
+      .then(() => loadTeams().catch((error) => console.error("Failed to reload teams", error)))
       .catch((error) => console.error("Failed to create team", error));
   };
 
   const handleDeleteTeam = (id: string) => {
     deleteAdminTeam(id)
-      .then(() => loadTeams())
+      .then(() => loadTeams().catch((error) => console.error("Failed to reload teams", error)))
       .catch((error) => console.error("Failed to delete team", error));
   };
 
@@ -183,13 +142,13 @@ export function AdminPage() {
       : [...team.memberIds, userId];
 
     updateAdminTeam(teamId, { memberIds: nextMemberIds })
-      .then(() => loadTeams())
+      .then(() => loadTeams().catch((error) => console.error("Failed to reload teams", error)))
       .catch((error) => console.error("Failed to update team members", error));
   };
 
   const handleAddProject = (teamId: string, name: string) => {
     createAdminProject(teamId, name)
-      .then(() => loadTeams())
+      .then(() => loadTeams().catch((error) => console.error("Failed to reload teams", error)))
       .catch((error) => console.error("Failed to create project", error));
   };
 

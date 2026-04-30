@@ -11,6 +11,7 @@ import {
   timesheetEntry,
   weeklySubmission,
   weeklySubmissionStatuses,
+  user,
 } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import logger from "@/lib/logger";
@@ -28,13 +29,13 @@ const isoDateSchema = z
 const listEntriesQuerySchema = z.object({
   from: isoDateSchema.optional(),
   to: isoDateSchema.optional(),
-  category: z.string().min(1).optional(),
+  category: z.enum(entryCategories).optional(),
   status: z.enum(entryStatuses).optional(),
 });
 
 const createEntrySchema = z.object({
   date: isoDateSchema,
-  category: z.string().min(1),
+  category: z.enum(entryCategories),
   description: z.string().trim().min(1).max(500),
   jiraIssueKey: z.string().trim().min(1).max(50).optional(),
   source: z.enum(entrySources).optional(),
@@ -46,7 +47,7 @@ const createEntrySchema = z.object({
 
 const updateEntrySchema = z
   .object({
-    category: z.string().min(1).optional(),
+    category: z.enum(entryCategories).optional(),
     description: z.string().trim().min(1).max(500).optional(),
     jiraIssueKey: z.string().trim().min(1).max(50).nullable().optional(),
     source: z.enum(entrySources).nullable().optional(),
@@ -63,31 +64,28 @@ const copyYesterdaySchema = z.object({
   date: isoDateSchema.optional(),
 });
 
-function toWebHeaders(
-  headers: Record<string, string | string[] | undefined>,
-): Headers {
-  const webHeaders = new Headers();
+async function resolveSessionUserId(req: any) {
+  try {
+    const session = await auth.api.getSession({
+      headers: req.headers,
+    });
 
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value === "string") {
-      webHeaders.set(key, value);
-      continue;
+    if (!session?.user?.id) {
+      return {
+        ok: false,
+        code: RESPONSE_CODE.UNAUTHORIZED,
+        message: "Unauthorized",
+        userId: null,
+        role: null,
+      } as const;
     }
 
-    if (Array.isArray(value)) {
-      webHeaders.set(key, value.join(", "));
-    }
-  }
-
-  return webHeaders;
-}
-
-async function resolveSessionUserId(reqHeaders: Record<string, string | string[] | undefined>) {
-  const { data: session, error } = await tryCatch(
-    auth.api.getSession({ headers: toWebHeaders(reqHeaders) }),
-  );
-
-  if (error) {
+    return {
+      ok: true,
+      userId: session.user.id,
+      role: (session.user.role ?? "developer") as string,
+    } as const;
+  } catch (error) {
     logger.error({ err: error }, "Failed to resolve auth session");
     return {
       ok: false,
@@ -97,22 +95,6 @@ async function resolveSessionUserId(reqHeaders: Record<string, string | string[]
       role: null,
     } as const;
   }
-
-  if (!session?.user?.id) {
-    return {
-      ok: false,
-      code: RESPONSE_CODE.UNAUTHORIZED,
-      message: "Unauthorized",
-      userId: null,
-      role: null,
-    } as const;
-  }
-
-  return {
-    ok: true,
-    userId: session.user.id,
-    role: (session.user.role ?? "developer") as string,
-  } as const;
 }
 
 function toIsoDate(date: Date) {
@@ -148,7 +130,7 @@ function buildCopySignature(entry: {
 }
 
 router.get("/timesheets/date/:date", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
 
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
@@ -190,7 +172,7 @@ router.get("/timesheets/date/:date", async (req, res) => {
 });
 
 router.get("/timesheets/entries", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
 
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
@@ -247,7 +229,7 @@ router.get("/timesheets/entries", async (req, res) => {
 });
 
 router.post("/timesheets/entries", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
 
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
@@ -323,7 +305,7 @@ router.post("/timesheets/entries", async (req, res) => {
 });
 
 router.patch("/timesheets/entries/:id", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
 
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
@@ -382,7 +364,7 @@ router.patch("/timesheets/entries/:id", async (req, res) => {
 });
 
 router.delete("/timesheets/entries/:id", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
 
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
@@ -419,7 +401,7 @@ router.delete("/timesheets/entries/:id", async (req, res) => {
 });
 
 router.post("/timesheets/copy-yesterday", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
 
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
@@ -579,17 +561,19 @@ const submitWeekSchema = z.object({
 
 const approveWeekSchema = z.object({
   weekStartDate: isoDateSchema,
+  userId: z.string().min(1),
   approverComment: z.string().max(500).optional(),
 });
 
 const dismissWeekSchema = z.object({
   weekStartDate: isoDateSchema,
+  userId: z.string().min(1),
   dismissComment: z.string().max(500).optional(),
 });
 
 /** Save or update weekly submission draft */
 router.post("/timesheets/week/draft", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
 
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
@@ -674,7 +658,7 @@ router.post("/timesheets/week/draft", async (req, res) => {
 
 /** Submit a week (only allowed on Friday or later) */
 router.post("/timesheets/week/submit", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
 
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
@@ -770,7 +754,7 @@ router.post("/timesheets/week/submit", async (req, res) => {
 
 /** Get week submission status */
 router.get("/timesheets/week/:weekStartDate", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
 
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
@@ -818,17 +802,17 @@ router.get("/timesheets/week/:weekStartDate", async (req, res) => {
   return sendSuccess(res, RESPONSE_CODE.OK, "Week status fetched", result);
 });
 
-/** Approve a week submission (admin only) */
+/** Approve a week submission (admin or manager) */
 router.patch("/timesheets/week/:weekStartDate/approve", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
 
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
   }
 
-  // Only admin can approve
-  if (sessionResult.role !== "admin") {
-    return sendError(res, RESPONSE_CODE.FORBIDDEN, "Only admins can approve weeks");
+  // Admin or manager can approve
+  if (sessionResult.role !== "admin" && sessionResult.role !== "manager") {
+    return sendError(res, RESPONSE_CODE.FORBIDDEN, "Only admins or managers can approve weeks");
   }
 
   const { weekStartDate: weekStartDateParam } = req.params;
@@ -860,11 +844,16 @@ router.patch("/timesheets/week/:weekStartDate/approve", async (req, res) => {
       .set({
         status: "approved",
         approvedBy: sessionResult.userId,
-        approverRole: "admin",
+        approverRole: sessionResult.role,
         approverComment: parsedBody.data.approverComment,
         updatedAt: new Date(),
       })
-      .where(eq(weeklySubmission.weekStartDate, parsedDate.data))
+      .where(
+        and(
+          eq(weeklySubmission.userId, parsedBody.data.userId),
+          eq(weeklySubmission.weekStartDate, parsedDate.data),
+        ),
+      )
       .returning(),
   );
 
@@ -882,7 +871,7 @@ router.patch("/timesheets/week/:weekStartDate/approve", async (req, res) => {
 
 /** Dismiss a week submission (admin or manager) */
 router.patch("/timesheets/week/:weekStartDate/dismiss", async (req, res) => {
-  const sessionResult = await resolveSessionUserId(req.headers);
+  const sessionResult = await resolveSessionUserId(req);
 
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
@@ -925,7 +914,12 @@ router.patch("/timesheets/week/:weekStartDate/dismiss", async (req, res) => {
         dismissComment: parsedBody.data.dismissComment,
         updatedAt: new Date(),
       })
-      .where(eq(weeklySubmission.weekStartDate, parsedDate.data))
+      .where(
+        and(
+          eq(weeklySubmission.userId, parsedBody.data.userId),
+          eq(weeklySubmission.weekStartDate, parsedDate.data),
+        ),
+      )
       .returning(),
   );
 
@@ -939,6 +933,73 @@ router.patch("/timesheets/week/:weekStartDate/dismiss", async (req, res) => {
   }
 
   return sendSuccess(res, RESPONSE_CODE.OK, "Week dismissed", updated[0]);
+});
+
+/**
+ * List weekly submissions (admin or manager)
+ * Query params: status (default 'submitted'), from, to
+ */
+router.get("/timesheets/submissions", async (req, res) => {
+  const sessionResult = await resolveSessionUserId(req);
+
+  if (!sessionResult.ok) {
+    return sendError(res, sessionResult.code, sessionResult.message);
+  }
+
+  if (sessionResult.role !== "admin" && sessionResult.role !== "manager") {
+    return sendError(res, RESPONSE_CODE.FORBIDDEN, "Only admins or managers can list submissions");
+  }
+
+  const status = (req.query.status as string) ?? "submitted";
+  const from = (req.query.from as string) ?? undefined;
+  const to = (req.query.to as string) ?? undefined;
+
+  const filters: any[] = [];
+
+  if (status) {
+    filters.push(eq(weeklySubmission.status, status));
+  }
+
+  if (from) {
+    filters.push(gte(weeklySubmission.weekStartDate, from));
+  }
+
+  if (to) {
+    filters.push(lte(weeklySubmission.weekStartDate, to));
+  }
+
+  try {
+    const { data: rows, error } = await tryCatch(
+      db
+        .select({
+          id: weeklySubmission.id,
+          userId: weeklySubmission.userId,
+          weekStartDate: weeklySubmission.weekStartDate,
+          status: weeklySubmission.status,
+          submittedAt: weeklySubmission.submittedAt,
+          approverComment: weeklySubmission.approverComment,
+          dismissComment: weeklySubmission.dismissComment,
+          createdAt: weeklySubmission.createdAt,
+          updatedAt: weeklySubmission.updatedAt,
+          userName: user.name,
+          userEmail: user.email,
+        })
+        .from(weeklySubmission)
+        .leftJoin(user, eq(weeklySubmission.userId, user.id))
+        .where(and(...filters))
+        .orderBy(desc(weeklySubmission.submittedAt)),
+    );
+
+    if (error) {
+      logger.error({ err: error, userId: sessionResult.userId }, "Failed to list submissions");
+      return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to list submissions");
+    }
+
+    return sendSuccess(res, RESPONSE_CODE.OK, "Submissions fetched", { count: rows.length, rows });
+  } catch (err) {
+    logger.error({ err }, "Failed to list submissions unexpected error");
+    return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to list submissions");
+  }
 });
 
 export default router;

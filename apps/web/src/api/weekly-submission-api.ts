@@ -8,6 +8,19 @@ export interface WeeklySubmissionResponse {
   data?: WeeklySubmission | any;
 }
 
+export interface WeeklySubmissionListResponse {
+  success: boolean;
+  code: number;
+  message: string;
+  data?: {
+    count: number;
+    rows: Array<WeeklySubmission & {
+      userName?: string | null;
+      userEmail?: string | null;
+    }>;
+  };
+}
+
 export const weeklySubmissionApi = {
   /**
    * Save a week as draft
@@ -44,10 +57,10 @@ export const weeklySubmissionApi = {
   /**
    * Approve a week submission (admin only)
    */
-  approve: async (weekStartDate: string, approverComment?: string): Promise<WeeklySubmission> => {
+  approve: async (weekStartDate: string, userId: string, approverComment?: string): Promise<WeeklySubmission> => {
     const response = await ApiClient.patch<WeeklySubmissionResponse>(
       `/api/timesheets/week/${weekStartDate}/approve`,
-      { weekStartDate, approverComment }
+      { weekStartDate, userId, approverComment }
     );
     return response.data as WeeklySubmission;
   },
@@ -55,11 +68,23 @@ export const weeklySubmissionApi = {
   /**
    * Dismiss a week submission (admin or manager only)
    */
-  dismiss: async (weekStartDate: string, dismissComment?: string): Promise<WeeklySubmission> => {
+  dismiss: async (weekStartDate: string, userId: string, dismissComment?: string): Promise<WeeklySubmission> => {
     const response = await ApiClient.patch<WeeklySubmissionResponse>(
       `/api/timesheets/week/${weekStartDate}/dismiss`,
-      { weekStartDate, dismissComment }
+      { weekStartDate, userId, dismissComment }
     );
     return response.data as WeeklySubmission;
+  },
+  /**
+   * List submissions for managers/admins
+   */
+  listSubmitted: async (status = "submitted", from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+
+    const response = await ApiClient.get<WeeklySubmissionListResponse>(`/api/timesheets/submissions?${params.toString()}`);
+    return response;
   },
 };
