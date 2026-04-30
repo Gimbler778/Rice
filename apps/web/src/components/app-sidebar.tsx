@@ -7,6 +7,7 @@ import {
   LogOut,
   User,
   History,
+  Monitor,
 } from "lucide-react";
 import {
   Sidebar,
@@ -27,6 +28,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useTheme } from "@/lib/use-theme";
 import { authClient } from "@/lib/auth-client";
 import { type AppRole, getSessionUserRole } from "@/lib/roles";
 import { useNavigate } from "react-router-dom";
@@ -103,6 +105,9 @@ function SidebarAccountMenu({
   userRole,
   onSignOut,
 }: SidebarAccountMenuProps) {
+  const { theme, setTheme } = useTheme();
+  const nextTheme = theme === "light" ? "dark" : "light";
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -122,11 +127,21 @@ function SidebarAccountMenu({
           </div>
         </SidebarMenuButton>
       </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-48 p-1.5 flex-col gap-1">
+      <PopoverContent side="top" align="start" className="w-48 p-1.5">
         <Link to="/profile" className={profileActionClassName}>
           <User className="size-4 shrink-0" />
           <span>Profile</span>
         </Link>
+        <button
+          type="button"
+          onClick={() => setTheme(nextTheme)}
+          className={`${profileActionClassName} w-full justify-between`}
+        >
+          <div className="flex items-center gap-2">
+            <Monitor className="size-4 shrink-0" />
+            <span className="capitalize">{theme}</span>
+          </div>
+        </button>
         <button
           type="button"
           onClick={onSignOut}

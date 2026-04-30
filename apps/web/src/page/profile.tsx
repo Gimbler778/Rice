@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ThemeSwitcher } from "@/components/ui/theme-switcher";
 import { useProfileIntegrations } from "@/lib/profile-integrations";
 
 type IntegrationRowProps = {
@@ -109,14 +108,11 @@ export function ProfilePage() {
 
   return (
     <div className="mx-auto mt-8 w-full max-w-4xl space-y-6 px-4 pb-8 sm:px-6 lg:px-8">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage connected integrations for your account.
-          </p>
-        </div>
-        <ThemeSwitcher />
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Manage connected integrations for your account.
+        </p>
       </div>
 
       <section className="rounded-lg border border-border/70 bg-background px-4 sm:px-6">
