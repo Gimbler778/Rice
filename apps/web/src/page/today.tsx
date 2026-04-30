@@ -157,7 +157,6 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
   const [editValues, setEditValues] = useState({
     description: entry.description,
     hours: entry.hours,
-    timeRemaining: entry.timeRemaining ?? 0,
     category: entry.category,
     jiraIssueKey: entry.jiraIssueKey ?? "",
     source: entry.source ?? "",
@@ -178,7 +177,6 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
     onUpdate(entry.id, {
       description: editValues.description,
       hours: editValues.hours,
-      timeRemaining: editValues.timeRemaining,
       category: editValues.category,
       jiraIssueKey: editValues.jiraIssueKey || undefined,
       source: (editValues.source || undefined) as EntrySource | undefined,
@@ -192,7 +190,6 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
     setEditValues({
       description: entry.description,
       hours: entry.hours,
-      timeRemaining: entry.timeRemaining ?? 0,
       category: entry.category,
       jiraIssueKey: entry.jiraIssueKey ?? "",
       source: entry.source ?? "",
@@ -286,20 +283,6 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
             }
           />
         </td>
-        {/* Time Remaining input */}
-        <td className="px-3 py-2">
-          <Input
-            type="number"
-            step="0.5"
-            min="0"
-            max="100"
-            className="h-8 text-xs w-16 text-center"
-            value={editValues.timeRemaining}
-            onChange={(e) =>
-              setEditValues((prev) => ({ ...prev, timeRemaining: parseFloat(e.target.value) || 0 }))
-            }
-          />
-        </td>
         {/* Save / cancel */}
         <td className="px-3 py-2">
           <div className="flex items-center gap-1">
@@ -348,10 +331,6 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
       <td className="px-3 py-2.5 text-center">
         <span className="text-sm font-mono font-medium">{entry.hours}h</span>
       </td>
-      {/* Time Remaining */}
-      <td className="px-3 py-2.5 text-center">
-        <span className="text-sm font-mono font-medium">{entry.timeRemaining ?? 0}h</span>
-      </td>
       {/* Actions */}
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-1">
@@ -392,7 +371,6 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
     source: "" as "" | EntrySource,
     sourceLink: "",
     hours: 1,
-    timeRemaining: 0,
     startHour: 9,
   });
 
@@ -415,7 +393,7 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
       source: values.source || undefined,
       sourceLink: values.sourceLink || undefined,
       hours: values.hours,
-      timeRemaining: values.timeRemaining,
+      timeRemaining: 0,
       startHour: values.startHour,
     });
   };
@@ -499,19 +477,6 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
         />
       </td>
       <td className="px-3 py-2">
-        <Input
-          type="number"
-          step="0.5"
-          min="0"
-          max="100"
-          className="h-8 text-xs w-16 text-center"
-          value={values.timeRemaining}
-          onChange={(e) =>
-            setValues((prev) => ({ ...prev, timeRemaining: parseFloat(e.target.value) || 0 }))
-          }
-        />
-      </td>
-      <td className="px-3 py-2">
         <div className="flex items-center gap-1">
           <Button size="icon" variant="ghost" className="size-7" onClick={handleAdd}>
             <Check className="size-3 text-teal-600" />
@@ -538,7 +503,6 @@ function EntryTable({ entries, onDelete, onUpdate, onAdd }: EntryTableProps) {
   const [showAddRow, setShowAddRow] = useState(false);
 
   const totalHours = entries.reduce((sum, e) => sum + e.hours, 0);
-  const totalTimeRemaining = entries.reduce((sum, e) => sum + (e.timeRemaining ?? 0), 0);
 
   const handleQuickAdd = (_hours: number) => {
     // Opens add row pre-filled with the quick-add hours
@@ -591,9 +555,6 @@ function EntryTable({ entries, onDelete, onUpdate, onAdd }: EntryTableProps) {
                 <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground w-16">
                   Time Worked
                 </th>
-                <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground w-16">
-                  Time Remaining
-                </th>
                 <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground w-20">
                   Actions
                 </th>
@@ -602,7 +563,7 @@ function EntryTable({ entries, onDelete, onUpdate, onAdd }: EntryTableProps) {
             <tbody>
               {entries.length === 0 && !showAddRow && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground">
                     No entries yet — add your first entry or accept a suggestion.
                   </td>
                 </tr>
@@ -638,11 +599,6 @@ function EntryTable({ entries, onDelete, onUpdate, onAdd }: EntryTableProps) {
                       )}
                     >
                       {totalHours}h
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <span className="text-sm font-semibold font-mono text-foreground">
-                      {totalTimeRemaining}h
                     </span>
                   </td>
                   <td />
@@ -1340,10 +1296,6 @@ export function TodayPage() {
           >
             Copy yesterday
           </Button>
-          {/* TODO: PATCH /api/timesheets/submit-week */}
-          <Button size="sm" className="h-7 text-xs bg-teal-600 hover:bg-teal-700 text-white">
-            Submit week
-          </Button>
         </div>
       </div>
 
@@ -1371,7 +1323,7 @@ export function TodayPage() {
             )}
 
             {/* Metric cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <MetricCard
                 label="Today"
                 value={`${totalHours}h`}
@@ -1384,13 +1336,6 @@ export function TodayPage() {
                 sub={`${weekLoggedDays} ${weekLoggedDays === 1 ? "day" : "days"} logged`}
               />
               <MetricCard label="Entries" value={entries.length} sub="today" />
-              {/* TODO: replace 12 with real streak from learning API */}
-              <MetricCard
-                label="Learning streak"
-                value={streak}
-                sub={`${streak === 1 ? "day" : "days"}`}
-                valueClassName="text-amber-600"
-              />
             </div>
 
             {/* Entry table */}
