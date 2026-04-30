@@ -103,8 +103,45 @@ class BitbucketApiError extends Error {
   }
 }
 
+class BitbucketOAuthError extends Error {
+  readonly status: number;
+  readonly oauthError: string | null;
+  readonly oauthErrorDescription: string | null;
+  readonly responseText: string;
+
+  constructor(
+    status: number,
+    message: string,
+    options: {
+      oauthError?: string | null;
+      oauthErrorDescription?: string | null;
+      responseText: string;
+    },
+  ) {
+    super(message);
+    this.name = "BitbucketOAuthError";
+    this.status = status;
+    this.oauthError = options.oauthError ?? null;
+    this.oauthErrorDescription = options.oauthErrorDescription ?? null;
+    this.responseText = options.responseText;
+  }
+}
+
 function isBitbucketUnauthorizedError(error: unknown) {
   return error instanceof BitbucketApiError && error.status === 401;
+}
+
+function isBitbucketInvalidRefreshTokenError(error: unknown) {
+  if (error instanceof BitbucketOAuthError) {
+    const description = error.oauthErrorDescription ?? "";
+    return error.status === 400 && /invalid\s*refresh_token/i.test(description);
+  }
+
+  if (error instanceof Error) {
+    return /Invalid\s*refresh_token/i.test(error.message);
+  }
+
+  return false;
 }
 
 function toWebHeaders(
@@ -202,7 +239,13 @@ async function resolveRequestAccounts(
 }
 
 function getConnectedProviders(linkedAccounts: ConnectedAccount[]) {
-  return Array.from(new Set(linkedAccounts.map((entry) => entry.providerId)));
+  return Array.from(
+    new Set(
+      linkedAccounts
+        .filter((entry) => Boolean(entry.accessToken || entry.refreshToken))
+        .map((entry) => entry.providerId),
+    ),
+  );
 }
 
 function getConnectionStatus(linkedAccounts: ConnectedAccount[]) {
@@ -351,6 +394,18 @@ async function persistRefreshedAccountTokens(
     .where(and(eq(account.userId, userId), eq(account.providerId, providerId)));
 }
 
+async function clearAccountTokens(userId: string, providerId: string) {
+  await db
+    .update(account)
+    .set({
+      accessToken: null,
+      refreshToken: null,
+      accessTokenExpiresAt: null,
+      refreshTokenExpiresAt: null,
+    })
+    .where(and(eq(account.userId, userId), eq(account.providerId, providerId)));
+}
+
 async function fetchAtlassianEntriesWithRefresh(
   userId: string,
   atlassianAccount: ConnectedAccount | undefined,
@@ -472,6 +527,23 @@ async function fetchBitbucketEntriesWithRefresh(
 
   let result = await tryCatch(runBitbucketFetch());
 
+  if (result.error && isBitbucketInvalidRefreshTokenError(result.error)) {
+    logger.info({ userId }, "Bitbucket refresh token invalid; clearing stored credentials");
+    const { error: clearError } = await tryCatch(clearAccountTokens(userId, "bitbucket"));
+    if (clearError) {
+      logger.warn({ err: clearError, userId }, "Failed to clear Bitbucket credentials after invalid refresh token");
+    }
+
+    bitbucketAccount.accessToken = null;
+    bitbucketAccount.refreshToken = null;
+    bitbucketAccount.accessTokenExpiresAt = null;
+
+    return {
+      entries: [] as DashboardEntry[],
+      failed: false,
+    };
+  }
+
   if (
     result.error &&
     bitbucketAccount.refreshToken &&
@@ -480,6 +552,26 @@ async function fetchBitbucketEntriesWithRefresh(
     const { data: refreshedAccessToken, error: refreshError } = await tryCatch(
       refreshBitbucketAccessToken(bitbucketAccount.refreshToken),
     );
+
+    if (refreshError && isBitbucketInvalidRefreshTokenError(refreshError)) {
+      logger.info({ userId }, "Bitbucket refresh token invalid; clearing stored credentials");
+      const { error: clearError } = await tryCatch(clearAccountTokens(userId, "bitbucket"));
+      if (clearError) {
+        logger.warn(
+          { err: clearError, userId },
+          "Failed to clear Bitbucket credentials after invalid refresh token",
+        );
+      }
+
+      bitbucketAccount.accessToken = null;
+      bitbucketAccount.refreshToken = null;
+      bitbucketAccount.accessTokenExpiresAt = null;
+
+      return {
+        entries: [] as DashboardEntry[],
+        failed: false,
+      };
+    }
 
     if (!refreshError) {
       // Create an updated account with the new access token and retry
@@ -671,8 +763,28 @@ async function refreshBitbucketAccessToken(refreshToken: string) {
 
   if (!tokenResponse.ok) {
     const errorText = await tokenResponse.text();
-    throw new Error(
+    let oauthError: string | null = null;
+    let oauthErrorDescription: string | null = null;
+
+    try {
+      const payload = JSON.parse(errorText) as {
+        error?: string;
+        error_description?: string;
+      };
+      oauthError = payload.error ?? null;
+      oauthErrorDescription = payload.error_description ?? null;
+    } catch {
+      // ignore JSON parse errors
+    }
+
+    throw new BitbucketOAuthError(
+      tokenResponse.status,
       `Unable to refresh Bitbucket access token (${tokenResponse.status}): ${errorText || tokenResponse.statusText}`,
+      {
+        oauthError,
+        oauthErrorDescription,
+        responseText: errorText,
+      },
     );
   }
 
@@ -1129,7 +1241,7 @@ async function fetchBitbucketEntries(
   return entries;
 }
 
-router.get("/integrations/status", async (req, res) => {
+router.get("/status", async (req, res) => {
   const requestAccounts = await resolveRequestAccounts(req.headers);
 
   if (!requestAccounts.ok) {
@@ -1157,7 +1269,7 @@ router.get("/integrations/status", async (req, res) => {
   );
 });
 
-router.get("/integrations/timesheet", async (req, res) => {
+router.get("/timesheet", async (req, res) => {
   const requestAccounts = await resolveRequestAccounts(req.headers);
 
   if (!requestAccounts.ok) {
@@ -1169,9 +1281,6 @@ router.get("/integrations/timesheet", async (req, res) => {
   }
 
   const { userId, linkedAccounts } = requestAccounts;
-
-  const { connectedProviders, atlassianConnected, bitbucketConnected } =
-    getConnectionStatus(linkedAccounts);
   const atlassianAccount = linkedAccounts.find(
     (entry) => entry.providerId === "atlassian",
   );
@@ -1202,6 +1311,9 @@ router.get("/integrations/timesheet", async (req, res) => {
       entries = [...entries, ...bitbucketResult.entries];
     }
   }
+
+  const { connectedProviders, atlassianConnected, bitbucketConnected } =
+    getConnectionStatus(linkedAccounts);
 
   entries.sort((a, b) => {
     return new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime();
@@ -1326,7 +1438,7 @@ function getLocalStartOfQuarter(date: Date) {
 const BITBUCKET_TYPE_LABEL = "Bitbucket items (PRs/Commits/Merges)";
 
 
-router.get("/integrations/teams", async (req, res) => {
+router.get("/teams", async (req, res) => {
   const requestAccounts = await resolveRequestAccounts(req.headers);
 
   if (!requestAccounts.ok) {
@@ -1402,7 +1514,7 @@ router.get("/integrations/teams", async (req, res) => {
 });
 
 /** team report aggregation **/
-router.get("/integrations/team-report/:teamId", async (req, res) => {
+router.get("/team-report/:teamId", async (req, res) => {
   const { teamId } = req.params; // we use teamId as cloudId
   const requestAccounts = await resolveRequestAccounts(req.headers);
 

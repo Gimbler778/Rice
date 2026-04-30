@@ -109,7 +109,7 @@ function toIsoDate(date: Date): string {
 }
 
 // GET /api/learning/:date
-router.get("/learning/:date", async (req, res) => {
+router.get("/:date", async (req, res) => {
   const sessionResult = await resolveSessionUserId(req.headers);
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);
@@ -145,7 +145,7 @@ router.get("/learning/:date", async (req, res) => {
 });
 
 // PUT /api/learning/:date  — upsert
-router.put("/learning/:date", async (req, res) => {
+router.put("/:date", async (req, res) => {
   const sessionResult = await resolveSessionUserId(req.headers);
   if (!sessionResult.ok) {
     return sendError(res, sessionResult.code, sessionResult.message);

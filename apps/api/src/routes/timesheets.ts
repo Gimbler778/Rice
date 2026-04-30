@@ -9,6 +9,8 @@ import {
   entrySources,
   entryStatuses,
   timesheetEntry,
+  weeklySubmission,
+  weeklySubmissionStatuses,
 } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import logger from "@/lib/logger";
@@ -92,6 +94,7 @@ async function resolveSessionUserId(reqHeaders: Record<string, string | string[]
       code: RESPONSE_CODE.INTERNAL_SERVER_ERROR,
       message: "Failed to resolve auth session",
       userId: null,
+      role: null,
     } as const;
   }
 
@@ -101,12 +104,14 @@ async function resolveSessionUserId(reqHeaders: Record<string, string | string[]
       code: RESPONSE_CODE.UNAUTHORIZED,
       message: "Unauthorized",
       userId: null,
+      role: null,
     } as const;
   }
 
   return {
     ok: true,
     userId: session.user.id,
+    role: (session.user.role ?? "developer") as string,
   } as const;
 }
 
@@ -175,7 +180,7 @@ router.get("/timesheets/date/:date", async (req, res) => {
 
   if (error) {
     logger.error({ err: error, userId: sessionResult.userId }, "Failed to fetch timesheet by date");
-    return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to fetch timesheet entries");
+    return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to fetch timesheet by date");
   }
 
   return sendSuccess(res, RESPONSE_CODE.OK, "Timesheet entries fetched", {
@@ -534,6 +539,406 @@ router.post("/timesheets/copy-yesterday", async (req, res) => {
     copiedCount: copiedEntries.length,
     entries: copiedEntries,
   });
+});
+
+// Weekly Submission Endpoints
+
+/** Get the Monday (start of week) for a given date */
+function getWeekStartDate(date: Date | string): string {
+  if (typeof date === "string") {
+    date = new Date(`${date}T12:00:00`);
+  }
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is Sunday
+  d.setDate(diff);
+  return toIsoDate(d);
+}
+
+/** Check if the given date is a Friday */
+function isFriday(isoDate: string): boolean {
+  const date = toDateAtNoon(isoDate);
+  return date.getDay() === 5;
+}
+
+/** Check if today is Friday or later in the week */
+function canSubmitWeek(weekStartDate: string): boolean {
+  const today = new Date();
+  const todayIso = toIsoDate(today);
+  
+  // Can only submit if today is Friday (day 5 of the week) or later
+  const weekEnd = toDateAtNoon(weekStartDate);
+  weekEnd.setDate(weekEnd.getDate() + 4); // Friday is 4 days after Monday
+  
+  return todayIso >= toIsoDate(weekEnd);
+}
+
+const submitWeekSchema = z.object({
+  weekStartDate: isoDateSchema,
+});
+
+const approveWeekSchema = z.object({
+  weekStartDate: isoDateSchema,
+  approverComment: z.string().max(500).optional(),
+});
+
+const dismissWeekSchema = z.object({
+  weekStartDate: isoDateSchema,
+  dismissComment: z.string().max(500).optional(),
+});
+
+/** Save or update weekly submission draft */
+router.post("/timesheets/week/draft", async (req, res) => {
+  const sessionResult = await resolveSessionUserId(req.headers);
+
+  if (!sessionResult.ok) {
+    return sendError(res, sessionResult.code, sessionResult.message);
+  }
+
+  const parsedBody = submitWeekSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    return sendError(
+      res,
+      RESPONSE_CODE.BAD_REQUEST,
+      "Invalid payload",
+      parsedBody.error.issues[0]?.message ?? "Invalid payload",
+    );
+  }
+
+  const { weekStartDate } = parsedBody.data;
+
+  // Check if submission already exists
+  const { data: existing } = await tryCatch(
+    db
+      .select()
+      .from(weeklySubmission)
+      .where(
+        and(
+          eq(weeklySubmission.userId, sessionResult.userId),
+          eq(weeklySubmission.weekStartDate, weekStartDate),
+        ),
+      )
+      .limit(1),
+  );
+
+  let result;
+  if (existing && existing.length > 0) {
+    // Update existing draft
+    const { data: updated, error } = await tryCatch(
+      db
+        .update(weeklySubmission)
+        .set({
+          status: "draft",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(weeklySubmission.userId, sessionResult.userId),
+            eq(weeklySubmission.weekStartDate, weekStartDate),
+          ),
+        )
+        .returning(),
+    );
+
+    if (error) {
+      logger.error({ err: error, userId: sessionResult.userId }, "Failed to update week draft");
+      return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to save week draft");
+    }
+
+    result = updated[0];
+  } else {
+    // Create new draft
+    const { data: created, error } = await tryCatch(
+      db
+        .insert(weeklySubmission)
+        .values({
+          id: crypto.randomUUID(),
+          userId: sessionResult.userId,
+          weekStartDate,
+          status: "draft",
+        })
+        .returning(),
+    );
+
+    if (error) {
+      logger.error({ err: error, userId: sessionResult.userId }, "Failed to create week draft");
+      return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to save week draft");
+    }
+
+    result = created[0];
+  }
+
+  return sendSuccess(res, RESPONSE_CODE.OK, "Week draft saved", result);
+});
+
+/** Submit a week (only allowed on Friday or later) */
+router.post("/timesheets/week/submit", async (req, res) => {
+  const sessionResult = await resolveSessionUserId(req.headers);
+
+  if (!sessionResult.ok) {
+    return sendError(res, sessionResult.code, sessionResult.message);
+  }
+
+  const parsedBody = submitWeekSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    return sendError(
+      res,
+      RESPONSE_CODE.BAD_REQUEST,
+      "Invalid payload",
+      parsedBody.error.issues[0]?.message ?? "Invalid payload",
+    );
+  }
+
+  const { weekStartDate } = parsedBody.data;
+
+  // Check if submission is allowed (must be Friday or later)
+  if (!canSubmitWeek(weekStartDate)) {
+    return sendError(
+      res,
+      RESPONSE_CODE.BAD_REQUEST,
+      "Week can only be submitted on Friday or later",
+    );
+  }
+
+  // Check if submission already exists
+  const { data: existing } = await tryCatch(
+    db
+      .select()
+      .from(weeklySubmission)
+      .where(
+        and(
+          eq(weeklySubmission.userId, sessionResult.userId),
+          eq(weeklySubmission.weekStartDate, weekStartDate),
+        ),
+      )
+      .limit(1),
+  );
+
+  let result;
+  if (existing && existing.length > 0) {
+    // Update existing
+    const { data: updated, error } = await tryCatch(
+      db
+        .update(weeklySubmission)
+        .set({
+          status: "submitted",
+          submittedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(weeklySubmission.userId, sessionResult.userId),
+            eq(weeklySubmission.weekStartDate, weekStartDate),
+          ),
+        )
+        .returning(),
+    );
+
+    if (error) {
+      logger.error({ err: error, userId: sessionResult.userId }, "Failed to submit week");
+      return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to submit week");
+    }
+
+    result = updated[0];
+  } else {
+    // Create new submission
+    const { data: created, error } = await tryCatch(
+      db
+        .insert(weeklySubmission)
+        .values({
+          id: crypto.randomUUID(),
+          userId: sessionResult.userId,
+          weekStartDate,
+          status: "submitted",
+          submittedAt: new Date(),
+        })
+        .returning(),
+    );
+
+    if (error) {
+      logger.error({ err: error, userId: sessionResult.userId }, "Failed to submit week");
+      return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to submit week");
+    }
+
+    result = created[0];
+  }
+
+  return sendSuccess(res, RESPONSE_CODE.OK, "Week submitted", result);
+});
+
+/** Get week submission status */
+router.get("/timesheets/week/:weekStartDate", async (req, res) => {
+  const sessionResult = await resolveSessionUserId(req.headers);
+
+  if (!sessionResult.ok) {
+    return sendError(res, sessionResult.code, sessionResult.message);
+  }
+
+  const { weekStartDate: weekStartDateParam } = req.params;
+  const parsedDate = isoDateSchema.safeParse(weekStartDateParam);
+
+  if (!parsedDate.success) {
+    return sendError(
+      res,
+      RESPONSE_CODE.BAD_REQUEST,
+      "Invalid week start date",
+      parsedDate.error.issues[0]?.message ?? "Invalid date",
+    );
+  }
+
+  const { data: submission, error } = await tryCatch(
+    db
+      .select()
+      .from(weeklySubmission)
+      .where(
+        and(
+          eq(weeklySubmission.userId, sessionResult.userId),
+          eq(weeklySubmission.weekStartDate, parsedDate.data),
+        ),
+      )
+      .limit(1),
+  );
+
+  if (error) {
+    logger.error({ err: error, userId: sessionResult.userId }, "Failed to fetch week status");
+    return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to fetch week status");
+  }
+
+  // Return existing submission or a default draft status
+  const result = submission && submission.length > 0
+    ? submission[0]
+    : {
+        weekStartDate: parsedDate.data,
+        status: "draft",
+        canSubmit: canSubmitWeek(parsedDate.data),
+      };
+
+  return sendSuccess(res, RESPONSE_CODE.OK, "Week status fetched", result);
+});
+
+/** Approve a week submission (admin only) */
+router.patch("/timesheets/week/:weekStartDate/approve", async (req, res) => {
+  const sessionResult = await resolveSessionUserId(req.headers);
+
+  if (!sessionResult.ok) {
+    return sendError(res, sessionResult.code, sessionResult.message);
+  }
+
+  // Only admin can approve
+  if (sessionResult.role !== "admin") {
+    return sendError(res, RESPONSE_CODE.FORBIDDEN, "Only admins can approve weeks");
+  }
+
+  const { weekStartDate: weekStartDateParam } = req.params;
+  const parsedDate = isoDateSchema.safeParse(weekStartDateParam);
+
+  if (!parsedDate.success) {
+    return sendError(
+      res,
+      RESPONSE_CODE.BAD_REQUEST,
+      "Invalid week start date",
+      parsedDate.error.issues[0]?.message ?? "Invalid date",
+    );
+  }
+
+  const parsedBody = approveWeekSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    return sendError(
+      res,
+      RESPONSE_CODE.BAD_REQUEST,
+      "Invalid payload",
+      parsedBody.error.issues[0]?.message ?? "Invalid payload",
+    );
+  }
+
+  const { data: updated, error } = await tryCatch(
+    db
+      .update(weeklySubmission)
+      .set({
+        status: "approved",
+        approvedBy: sessionResult.userId,
+        approverRole: "admin",
+        approverComment: parsedBody.data.approverComment,
+        updatedAt: new Date(),
+      })
+      .where(eq(weeklySubmission.weekStartDate, parsedDate.data))
+      .returning(),
+  );
+
+  if (error) {
+    logger.error({ err: error, userId: sessionResult.userId }, "Failed to approve week");
+    return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to approve week");
+  }
+
+  if (updated.length === 0) {
+    return sendError(res, RESPONSE_CODE.NOT_FOUND, "Week submission not found");
+  }
+
+  return sendSuccess(res, RESPONSE_CODE.OK, "Week approved", updated[0]);
+});
+
+/** Dismiss a week submission (admin or manager) */
+router.patch("/timesheets/week/:weekStartDate/dismiss", async (req, res) => {
+  const sessionResult = await resolveSessionUserId(req.headers);
+
+  if (!sessionResult.ok) {
+    return sendError(res, sessionResult.code, sessionResult.message);
+  }
+
+  // Admin or manager can dismiss
+  if (sessionResult.role !== "admin" && sessionResult.role !== "manager") {
+    return sendError(res, RESPONSE_CODE.FORBIDDEN, "Only admins or managers can dismiss weeks");
+  }
+
+  const { weekStartDate: weekStartDateParam } = req.params;
+  const parsedDate = isoDateSchema.safeParse(weekStartDateParam);
+
+  if (!parsedDate.success) {
+    return sendError(
+      res,
+      RESPONSE_CODE.BAD_REQUEST,
+      "Invalid week start date",
+      parsedDate.error.issues[0]?.message ?? "Invalid date",
+    );
+  }
+
+  const parsedBody = dismissWeekSchema.safeParse(req.body);
+
+  if (!parsedBody.success) {
+    return sendError(
+      res,
+      RESPONSE_CODE.BAD_REQUEST,
+      "Invalid payload",
+      parsedBody.error.issues[0]?.message ?? "Invalid payload",
+    );
+  }
+
+  const { data: updated, error } = await tryCatch(
+    db
+      .update(weeklySubmission)
+      .set({
+        status: "dismissed",
+        dismissedBy: sessionResult.userId,
+        dismissComment: parsedBody.data.dismissComment,
+        updatedAt: new Date(),
+      })
+      .where(eq(weeklySubmission.weekStartDate, parsedDate.data))
+      .returning(),
+  );
+
+  if (error) {
+    logger.error({ err: error, userId: sessionResult.userId }, "Failed to dismiss week");
+    return sendError(res, RESPONSE_CODE.INTERNAL_SERVER_ERROR, "Failed to dismiss week");
+  }
+
+  if (updated.length === 0) {
+    return sendError(res, RESPONSE_CODE.NOT_FOUND, "Week submission not found");
+  }
+
+  return sendSuccess(res, RESPONSE_CODE.OK, "Week dismissed", updated[0]);
 });
 
 export default router;

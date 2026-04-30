@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -6,18 +6,23 @@ import { fetchCategories, createCategory, updateCategory, deleteCategory } from 
 import { GitBranch, Settings, Tag, Users } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
-
 import {
-  MOCK_POLICY,
-  MOCK_TEAMS,
-  MOCK_USERS,
-} from "./admin/mock-data";
+  createAdminProject,
+  createAdminTeam,
+  deleteAdminTeam,
+  fetchAdminTeams,
+  fetchAdminUsers,
+  updateAdminTeam,
+  updateAdminUserRole,
+} from "@/api/admin-api";
+
+import { MOCK_POLICY } from "./admin/mock-data";
 import { CategoriesTab } from "./admin/tabs/categories-tab";
 
 import { PolicyTab } from "./admin/tabs/policy-tab";
 import { TeamsTab } from "./admin/tabs/teams-tab";
 import { UsersTab } from "./admin/tabs/users-tab";
-import type { AdminTab, UserRole } from "./admin/types";
+import type { AdminTab, AdminTeam, AdminUser, UserRole } from "./admin/types";
 import { TabButton } from "./admin/ui";
 
 const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
@@ -26,6 +31,17 @@ const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
   { id: "teams", label: "Teams & projects", icon: GitBranch },
   { id: "policy", label: "Policy", icon: Settings },
 ];
+
+function getInitials(name: string) {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
 
 export function AdminPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>("categories");
@@ -68,13 +84,45 @@ export function AdminPage() {
     },
   });
 
-  const [users, setUsers] = useState(MOCK_USERS);
-  const [teams, setTeams] = useState(MOCK_TEAMS);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [teams, setTeams] = useState<AdminTeam[]>([]);
 
   const [policy, setPolicy] = useState(MOCK_POLICY);
 
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id ?? null;
+
+  const loadUsers = useCallback(async () => {
+    try {
+      const apiUsers = await fetchAdminUsers();
+      setUsers(
+        apiUsers.map((user) => ({
+          ...user,
+          avatarInitials: getInitials(user.name),
+          lastActive: "-",
+          isCurrentUser: user.id === currentUserId,
+        })),
+      );
+    } catch (error) {
+      console.error("Failed to load users", error);
+      toast.error("Failed to load users");
+    }
+  }, [currentUserId]);
+
+  const loadTeams = useCallback(async () => {
+    try {
+      const apiTeams = await fetchAdminTeams();
+      setTeams(apiTeams);
+    } catch (error) {
+      console.error("Failed to load teams", error);
+      toast.error("Failed to load teams");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadUsers();
+    void loadTeams();
+  }, [loadUsers, loadTeams]);
 
   const handleToggleCategory = (id: string) => {
     const category = categories.find((c) => c.id === id);
@@ -95,54 +143,54 @@ export function AdminPage() {
   };
 
   const handleRoleChange = (userId: string, newRole: UserRole) => {
-    setUsers((prev) => {
-      const targetUser = prev.find((user) => user.id === userId);
-      if (!targetUser) {
-        return prev;
-      }
+    const previousUsers = users;
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)));
 
-      const adminCount = prev.filter((user) => user.role === "admin").length;
-      if (
-        targetUser.role === "admin" &&
-        newRole !== "admin" &&
-        adminCount <= 1
-      ) {
-        return prev;
-      }
-
-      return prev.map((user) =>
-        user.id === userId ? { ...user, role: newRole } : user,
-      );
-    });
+    updateAdminUserRole(userId, newRole)
+      .catch((error) => {
+        console.error("Failed to update role", error);
+        setUsers(previousUsers);
+      })
+      .finally(() => {
+        void loadUsers();
+      });
   };
 
-  const handleAddTeam = (name: string) => {
-    setTeams((prev) => [
-      ...prev,
-      { id: `t-${Date.now()}`, name, memberIds: [], projects: [] },
-    ]);
+  const handleAddTeam = (name: string, managerId?: string | null) => {
+    if (!managerId) {
+      return;
+    }
+
+    createAdminTeam({ name, managerId, memberIds: [managerId] })
+      .then(() => loadTeams())
+      .catch((error) => console.error("Failed to create team", error));
   };
 
   const handleDeleteTeam = (id: string) => {
-    setTeams((prev) => prev.filter((team) => team.id !== id));
+    deleteAdminTeam(id)
+      .then(() => loadTeams())
+      .catch((error) => console.error("Failed to delete team", error));
   };
 
   const handleToggleMember = (teamId: string, userId: string) => {
-    setTeams((prev) =>
-      prev.map((team) => {
-        if (team.id !== teamId) {
-          return team;
-        }
+    const team = teams.find((item) => item.id === teamId);
+    if (!team) {
+      return;
+    }
 
-        const hasMember = team.memberIds.includes(userId);
-        return {
-          ...team,
-          memberIds: hasMember
-            ? team.memberIds.filter((id) => id !== userId)
-            : [...team.memberIds, userId],
-        };
-      }),
-    );
+    const nextMemberIds = team.memberIds.includes(userId)
+      ? team.memberIds.filter((id) => id !== userId)
+      : [...team.memberIds, userId];
+
+    updateAdminTeam(teamId, { memberIds: nextMemberIds })
+      .then(() => loadTeams())
+      .catch((error) => console.error("Failed to update team members", error));
+  };
+
+  const handleAddProject = (teamId: string, name: string) => {
+    createAdminProject(teamId, name)
+      .then(() => loadTeams())
+      .catch((error) => console.error("Failed to create project", error));
   };
 
 
@@ -204,6 +252,7 @@ export function AdminPage() {
             onAddTeam={handleAddTeam}
             onDeleteTeam={handleDeleteTeam}
             onToggleMember={handleToggleMember}
+            onAddProject={handleAddProject}
           />
         )}
 

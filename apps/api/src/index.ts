@@ -11,6 +11,7 @@ import { env } from "@/lib/env";
 import integrationsRouter from "./routes/integrations";
 import learningRouter from "./routes/learning";
 import timesheetsRouter from "./routes/timesheets";
+import adminRouter from "./routes/admin";
 
 const app = express();
 
@@ -55,8 +56,9 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 app.use("/api", timesheetsRouter);
-app.use("/api", integrationsRouter);
+app.use("/api/integrations", integrationsRouter);
 app.use("/api", learningRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api", categoriesRouter);
 
 app.get("/health", (_req, res) => {

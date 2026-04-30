@@ -2,6 +2,14 @@ import { useState } from "react";
 
 import { Check, Plus, Trash2 } from "lucide-react";
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,9 +22,10 @@ import { SectionHeader } from "../ui";
 type TeamsTabProps = {
   teams: AdminTeam[];
   users: AdminUser[];
-  onAddTeam: (name: string) => void;
+  onAddTeam: (name: string, managerId?: string | null) => void;
   onDeleteTeam: (id: string) => void;
   onToggleMember: (teamId: string, userId: string) => void;
+  onAddProject: (teamId: string, name: string) => void;
 };
 
 export function TeamsTab({
@@ -25,9 +34,12 @@ export function TeamsTab({
   onAddTeam,
   onDeleteTeam,
   onToggleMember,
+  onAddProject,
 }: TeamsTabProps) {
   const [showAdd, setShowAdd] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
+  const [newTeamManager, setNewTeamManager] = useState<string | null>(null);
+  const [projectDrafts, setProjectDrafts] = useState<Record<string, string>>({});
 
   const handleAddTeam = () => {
     const trimmed = newTeamName.trim();
@@ -35,8 +47,10 @@ export function TeamsTab({
       return;
     }
 
-    onAddTeam(trimmed);
+    // require manager selection
+    onAddTeam(trimmed, newTeamManager);
     setNewTeamName("");
+    setNewTeamManager(null);
     setShowAdd(false);
   };
 
@@ -68,6 +82,22 @@ export function TeamsTab({
               onChange={(event) => setNewTeamName(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && handleAddTeam()}
             />
+            <div className="w-48">
+              <Select value={newTeamManager ?? ""} onValueChange={(v) => setNewTeamManager(v || null)}>
+                <SelectTrigger className="h-8 text-sm w-full text-left">
+                  <SelectValue placeholder="Select manager" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users
+                    .filter((u) => u.role === "manager" || u.role === "admin")
+                    .map((u) => (
+                    <SelectItem key={u.id} value={u.id} className="text-sm">
+                      {u.name} {u.role === "admin" ? "(admin)" : "(manager)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button
               size="sm"
               className="h-8 text-xs bg-teal-600 hover:bg-teal-700 text-white"
@@ -91,7 +121,12 @@ export function TeamsTab({
         <Card key={team.id}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium">{team.name}</CardTitle>
+              <div>
+                <CardTitle className="text-sm font-medium">{team.name}</CardTitle>
+                {team.managerId && (
+                  <div className="text-xs text-muted-foreground">Manager: {users.find((u) => u.id === team.managerId)?.name ?? "-"}</div>
+                )}
+              </div>
               <Button
                 size="icon"
                 variant="ghost"
@@ -107,9 +142,32 @@ export function TeamsTab({
                   {project}
                 </Badge>
               ))}
-              <button className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5">
-                <Plus className="size-3" /> project
-              </button>
+              <div className="flex items-center gap-1">
+                <Input
+                  value={projectDrafts[team.id] ?? ""}
+                  onChange={(event) =>
+                    setProjectDrafts((prev) => ({ ...prev, [team.id]: event.target.value }))
+                  }
+                  placeholder="Project name"
+                  className="h-7 w-32 text-xs"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    const projectName = (projectDrafts[team.id] ?? "").trim();
+                    if (!projectName) {
+                      return;
+                    }
+
+                    onAddProject(team.id, projectName);
+                    setProjectDrafts((prev) => ({ ...prev, [team.id]: "" }));
+                  }}
+                >
+                  <Plus className="size-3 mr-1" /> Add project
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="pt-0">
