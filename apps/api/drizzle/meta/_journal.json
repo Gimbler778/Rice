@@ -22,6 +22,13 @@
       "when": 1777477235173,
       "tag": "0002_cuddly_deathbird",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777543467747,
+      "tag": "0003_ordinary_lorna_dane",
+      "breakpoints": true
     }
   ]
 }

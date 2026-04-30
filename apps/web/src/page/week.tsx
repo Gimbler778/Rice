@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, startOfWeek, addDays, isToday, isFuture } from "date-fns";
 import {
@@ -32,6 +32,8 @@ import {
   buildWeeklySummaryFromEntries,
   mapIntegrationEntryToTimesheetEntry,
 } from "@/lib/integration-timesheet";
+import { weeklySubmissionApi } from "@/api/weekly-submission-api";
+import type { WeeklySubmission } from "@/types/weekly-submission";
 
 // Category colour map for the summary bar fills
 
@@ -200,6 +202,7 @@ interface SubmitDialogProps {
   onClose: () => void;
   onConfirm: () => void;
   isSubmitting: boolean;
+  canSubmitWeek: boolean;
   incompleteDays: string[];
 }
 
@@ -208,6 +211,7 @@ function SubmitDialog({
   onClose,
   onConfirm,
   isSubmitting,
+  canSubmitWeek,
   incompleteDays,
 }: SubmitDialogProps) {
   return (
@@ -227,8 +231,14 @@ function SubmitDialog({
             <AlertTriangle className="size-4 shrink-0 mt-0.5" />
             <span>
               {incompleteDays.join(", ")} still have incomplete entries. You can
-              still submit, but consider filling them first.
+              still submit once Friday arrives, but consider filling them first.
             </span>
+          </div>
+        )}
+
+        {!canSubmitWeek && (
+          <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm text-muted-foreground dark:border-zinc-800 dark:bg-zinc-950/30">
+            Submission unlocks on Friday. You can save a draft now and submit later.
           </div>
         )}
 
@@ -238,7 +248,7 @@ function SubmitDialog({
           </Button>
           <Button
             onClick={onConfirm}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !canSubmitWeek}
             className="bg-teal-600 hover:bg-teal-700 text-white"
           >
             {isSubmitting ? (
@@ -271,7 +281,8 @@ export function WeekPage() {
   // Submit dialog
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [weekSubmission, setWeekSubmission] = useState<WeeklySubmission | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
 
   // Derived values
   // Week label: "Mar 23 – Mar 29, 2026"
@@ -279,6 +290,12 @@ export function WeekPage() {
   const weekEnd = addDays(weekStart, 4); // Mon–Fri
   const weekLabel = `${format(weekStart, "MMM d")} – ${format(weekEnd, "MMM d, yyyy")}`;
   const weekNumber = format(weekStart, "w");
+  
+  // Convert week start to ISO date string (YYYY-MM-DD)
+  const weekStartIso = format(weekStart, "yyyy-MM-dd");
+  const fridayOfWeek = new Date(weekStart);
+  fridayOfWeek.setDate(fridayOfWeek.getDate() + 4); // Friday is 4 days after Monday
+  const canSubmitWeek = new Date() >= fridayOfWeek;
 
   const mappedEntries = useMemo(
     () =>
@@ -320,17 +337,52 @@ export function WeekPage() {
     navigate(`/today?date=${day.date}`);
   };
 
-  /** Submit week — calls PATCH /api/timesheets/submit-week */
-  const handleSubmit = async () => {
+  /** Save draft — saves current state without submitting */
+  const handleSaveDraft = async () => {
     setIsSubmitting(true);
+    setSubmissionError(null);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // mock delay
-      setIsSubmitted(true);
-      setSubmitDialogOpen(false);
+      const result = await weeklySubmissionApi.saveDraft(weekStartIso);
+      setWeekSubmission(result);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to save draft";
+      setSubmissionError(errorMessage);
+      console.error("Failed to save draft:", error);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  /** Submit week — calls API to submit for approval */
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setSubmissionError(null);
+    try {
+      const result = await weeklySubmissionApi.submit(weekStartIso);
+      setWeekSubmission(result);
+      setSubmitDialogOpen(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to submit week";
+      setSubmissionError(errorMessage);
+      console.error("Failed to submit week:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Load submission status when week changes
+  useEffect(() => {
+    const loadSubmissionStatus = async () => {
+      try {
+        const status = await weeklySubmissionApi.getStatus(weekStartIso);
+        setWeekSubmission(status);
+      } catch (error) {
+        console.error("Failed to load submission status:", error);
+      }
+    };
+
+    loadSubmissionStatus();
+  }, [weekStartIso]);
 
   // Render
 
@@ -377,20 +429,26 @@ export function WeekPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {isSubmitted ? (
-            /* Submitted state — locked badge */
+          {weekSubmission && weekSubmission.status !== "draft" ? (
+            /* Submitted/Approved state — locked badge */
             <div className="flex items-center gap-1.5 text-xs text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 px-3 py-1.5 rounded-md">
               <Lock className="size-3.5" />
-              Week submitted
+              {weekSubmission.status === "submitted" ? "Pending review" : "Week " + weekSubmission.status}
             </div>
           ) : (
             <Button
               size="sm"
               className="h-7 text-xs bg-teal-600 hover:bg-teal-700 text-white"
-              onClick={() => setSubmitDialogOpen(true)}
+              onClick={() => {
+                if (canSubmitWeek) {
+                  setSubmitDialogOpen(true);
+                }
+              }}
+              disabled={!canSubmitWeek}
+              title={!canSubmitWeek ? "Submission unlocks on Friday. Save a draft for now." : undefined}
             >
               <Send className="size-3.5 mr-1.5" />
-              Submit week
+              {canSubmitWeek ? "Submit week" : "Save draft first"}
             </Button>
           )}
         </div>
@@ -411,17 +469,38 @@ export function WeekPage() {
           </div>
         )}
 
-        {/* Approved banner — shown after manager approves */}
-        {/* TODO: show when weekDays[0].status === "approved" */}
-        {isSubmitted && (
-          <div className="flex items-center gap-2 rounded-md border border-teal-300 bg-teal-50 dark:bg-teal-950/30 dark:border-teal-700 px-4 py-2.5 text-sm text-teal-800 dark:text-teal-300">
-            <CheckCircle2 className="size-4 shrink-0" />
-            This week has been submitted. Awaiting manager review.
+        {submissionError && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
+            {submissionError}
           </div>
         )}
 
+        {/* Approved/Submitted banner — shown after submission */}
+        {weekSubmission && (
+          <>
+            {weekSubmission.status === "approved" && (
+              <div className="flex items-center gap-2 rounded-md border border-teal-300 bg-teal-50 dark:bg-teal-950/30 dark:border-teal-700 px-4 py-2.5 text-sm text-teal-800 dark:text-teal-300">
+                <CheckCircle2 className="size-4 shrink-0" />
+                Week approved by {weekSubmission.approverRole === "admin" ? "admin" : "manager"}{weekSubmission.approverComment ? `: ${weekSubmission.approverComment}` : "."}.
+              </div>
+            )}
+            {weekSubmission.status === "submitted" && (
+              <div className="flex items-center gap-2 rounded-md border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700 px-4 py-2.5 text-sm text-blue-800 dark:text-blue-300">
+                <CheckCircle2 className="size-4 shrink-0" />
+                Week submitted on {format(new Date(weekSubmission.submittedAt || new Date()), "MMM d, yyyy")}. Awaiting review.
+              </div>
+            )}
+            {weekSubmission.status === "dismissed" && (
+              <div className="flex items-center gap-2 rounded-md border border-orange-300 bg-orange-50 dark:bg-orange-950/30 dark:border-orange-700 px-4 py-2.5 text-sm text-orange-800 dark:text-orange-300">
+                <AlertTriangle className="size-4 shrink-0" />
+                Week dismissed{weekSubmission.dismissComment ? `: ${weekSubmission.dismissComment}` : "."} You can resubmit after addressing feedback.
+              </div>
+            )}
+          </>
+        )}
+
         {/* Incomplete day warning banner */}
-        {incompleteDays.length > 0 && !isSubmitted && (
+        {incompleteDays.length > 0 && (!weekSubmission || weekSubmission.status === "draft") && (
           <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-2.5">
             <div className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300">
               <AlertTriangle className="size-4 shrink-0" />
@@ -443,7 +522,7 @@ export function WeekPage() {
         )}
 
         {/* Empty past day warning (no entries at all) */}
-        {emptyPastDays.length > 0 && !isSubmitted && (
+        {emptyPastDays.length > 0 && (!weekSubmission || weekSubmission.status === "draft") && (
           <div className="flex items-center gap-2 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/30 px-4 py-2.5 text-sm text-muted-foreground">
             <AlertTriangle className="size-4 shrink-0" />
             {emptyPastDays.length} past{" "}
@@ -469,19 +548,30 @@ export function WeekPage() {
         />
 
         {/* Bottom submit CTA */}
-        {!isSubmitted && (
+        {!weekSubmission || (weekSubmission.status === "draft") || (weekSubmission.status === "dismissed") ? (
           <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" size="sm">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleSaveDraft}
+              disabled={isSubmitting}
+            >
               Save draft
             </Button>
             <Button
               size="sm"
-              className="bg-teal-600 hover:bg-teal-700 text-white"
+              className="bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => setSubmitDialogOpen(true)}
+              disabled={isSubmitting || !canSubmitWeek}
+              title={!canSubmitWeek ? `Can only submit on Friday or later (Friday is ${format(fridayOfWeek, "MMM d")})` : ""}
             >
               <Send className="size-3.5 mr-1.5" />
               Submit week
             </Button>
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground text-right pt-1">
+            Week {weekSubmission.status === "submitted" ? "submitted, awaiting review" : weekSubmission.status}
           </div>
         )}
       </div>
@@ -492,6 +582,7 @@ export function WeekPage() {
         onClose={() => setSubmitDialogOpen(false)}
         onConfirm={handleSubmit}
         isSubmitting={isSubmitting}
+        canSubmitWeek={canSubmitWeek}
         incompleteDays={incompleteDays}
       />
     </div>

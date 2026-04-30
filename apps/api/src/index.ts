@@ -51,7 +51,7 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 app.use("/api", timesheetsRouter);
-app.use("/api", integrationsRouter);
+app.use("/api/integrations", integrationsRouter);
 app.use("/api", learningRouter);
 
 app.get("/health", (_req, res) => {
