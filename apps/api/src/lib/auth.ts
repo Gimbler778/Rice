@@ -34,6 +34,13 @@ export const auth = betterAuth({
     provider: "pg",
     schema: schema,
   }),
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true,
+      partitioned: true,
+    },
+  },
   user: {
     additionalFields: {
       role: {
