@@ -57,7 +57,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use("/api", timesheetsRouter);
 app.use("/api/integrations", integrationsRouter);
-app.use("/api", learningRouter);
+app.use("/api/learning", learningRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api", categoriesRouter);
 
