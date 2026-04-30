@@ -1,4 +1,4 @@
-import { index, pgTable, real, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { index, pgTable, real, text, timestamp, unique, boolean } from "drizzle-orm/pg-core";
 
 import { user } from "@/db/schema/better-auth";
 
@@ -27,7 +27,7 @@ export const timesheetEntry = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     date: text("date").notNull(), // ISO date string YYYY-MM-DD
-    category: text("category", { enum: entryCategories }).notNull(),
+    category: text("category").notNull(),
     description: text("description").notNull(),
     jiraIssueKey: text("jira_issue_key"),
     source: text("source", { enum: entrySources }),
@@ -70,4 +70,20 @@ export const learningEntry = pgTable(
     index("learning_entry_user_id_idx").on(table.userId),
     unique("learning_entry_user_date_uniq").on(table.userId, table.date),
   ],
+);
+
+export const categoryConfig = pgTable(
+  "category_config",
+  {
+    id: text("id").primaryKey(), // slug for default, uuid for custom
+    name: text("name").notNull(),
+    color: text("color").notNull(),
+    isDefault: boolean("is_default").notNull().default(false),
+    isEnabled: boolean("is_enabled").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  }
 );

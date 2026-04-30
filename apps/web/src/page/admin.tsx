@@ -1,11 +1,13 @@
 import { useState } from "react";
 
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { fetchCategories, createCategory, updateCategory, deleteCategory } from "@/api/categories-api";
 import { GitBranch, Settings, Tag, Users } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
 
 import {
-  MOCK_CATEGORIES,
   MOCK_POLICY,
   MOCK_TEAMS,
   MOCK_USERS,
@@ -28,7 +30,44 @@ const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
 export function AdminPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>("categories");
 
-  const [categories, setCategories] = useState(MOCK_CATEGORIES);
+  const queryClient = useQueryClient();
+
+  const { data: categoriesData } = useQuery({
+    queryKey: ["categories"],
+    queryFn: fetchCategories,
+  });
+  const categories = categoriesData?.categories || [];
+
+  const updateCategoryMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: any }) => updateCategory(id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+    onError: () => {
+      toast.error("Failed to update category");
+    },
+  });
+
+  const createCategoryMutation = useMutation({
+    mutationFn: (name: string) => createCategory({ name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+    onError: () => {
+      toast.error("Failed to create category");
+    },
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (id: string) => deleteCategory(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+    onError: () => {
+      toast.error("Failed to delete category");
+    },
+  });
+
   const [users, setUsers] = useState(MOCK_USERS);
   const [teams, setTeams] = useState(MOCK_TEAMS);
 
@@ -38,34 +77,21 @@ export function AdminPage() {
   const currentUserId = session?.user?.id ?? null;
 
   const handleToggleCategory = (id: string) => {
-    setCategories((prev) =>
-      prev.map((category) =>
-        category.id === id
-          ? { ...category, isEnabled: !category.isEnabled }
-          : category,
-      ),
-    );
+    const category = categories.find((c) => c.id === id);
+    if (!category) return;
+    updateCategoryMutation.mutate({ id, updates: { isEnabled: !category.isEnabled } });
   };
 
   const handleRenameCategory = (id: string, name: string) => {
-    setCategories((prev) =>
-      prev.map((category) =>
-        category.id === id ? { ...category, name } : category,
-      ),
-    );
+    updateCategoryMutation.mutate({ id, updates: { name } });
   };
 
   const handleAddCategory = (name: string) => {
-    setCategories((prev) => [
-      ...prev,
-      {
-        id: `cat-${Date.now()}`,
-        name,
-        color: "bg-zinc-400",
-        isDefault: false,
-        isEnabled: true,
-      },
-    ]);
+    createCategoryMutation.mutate(name);
+  };
+
+  const handleDeleteCategory = (id: string) => {
+    deleteCategoryMutation.mutate(id);
   };
 
   const handleRoleChange = (userId: string, newRole: UserRole) => {
@@ -159,6 +185,7 @@ export function AdminPage() {
             onToggleCategory={handleToggleCategory}
             onRenameCategory={handleRenameCategory}
             onAddCategory={handleAddCategory}
+            onDeleteCategory={handleDeleteCategory}
           />
         )}
 

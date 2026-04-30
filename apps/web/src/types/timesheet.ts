@@ -1,17 +1,6 @@
 // Enums
 /** All valid work categories. "manual_other" is for free-text custom entries. */
-export type EntryCategory =
-  | "development"
-  | "code_review"
-  | "testing"
-  | "documentation"
-  | "meetings"
-  | "admin"
-  | "org_sessions"
-  | "events"
-  | "support"
-  | "learning"
-  | "manual_other";
+export type EntryCategory = string;
 
 /** Status of a timesheet day or weekly submission. */
 export type TimesheetStatus = "draft" | "submitted" | "approved";
@@ -78,9 +67,13 @@ export interface CrossCheckPrompt {
   source: EntrySource;
 }
 
-// Category display helpers
 
-export const CATEGORY_LABELS: Record<EntryCategory, string> = {
+
+/** Today's date as ISO string (used to seed mock data). */
+const TODAY = new Date().toISOString().split("T")[0];
+
+// Fallback displays for older components
+export const CATEGORY_LABELS: Record<string, string> = {
   development: "Development",
   code_review: "Code review",
   testing: "Testing",
@@ -94,8 +87,7 @@ export const CATEGORY_LABELS: Record<EntryCategory, string> = {
   manual_other: "Other",
 };
 
-/** Tailwind classes for each category badge. */
-export const CATEGORY_BADGE_CLASSES: Record<EntryCategory, string> = {
+export const CATEGORY_BADGE_CLASSES: Record<string, string> = {
   development: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
   code_review: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
   testing: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -108,10 +100,6 @@ export const CATEGORY_BADGE_CLASSES: Record<EntryCategory, string> = {
   learning: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   manual_other: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
 };
-
-
-/** Today's date as ISO string (used to seed mock data). */
-const TODAY = new Date().toISOString().split("T")[0];
 
 /**
  * MOCK: Today's timesheet entries.

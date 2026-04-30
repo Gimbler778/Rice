@@ -4,6 +4,8 @@ import { toNodeHandler } from "better-auth/node";
 import logger from "@/lib/logger";
 import { RESPONSE_CODE, sendSuccess } from "@/lib/response";
 
+import categoriesRouter from "./routes/categories";
+
 import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import integrationsRouter from "./routes/integrations";
@@ -53,6 +55,7 @@ app.use(express.json());
 app.use("/api", timesheetsRouter);
 app.use("/api", integrationsRouter);
 app.use("/api", learningRouter);
+app.use("/api", categoriesRouter);
 
 app.get("/health", (_req, res) => {
   return sendSuccess(res, RESPONSE_CODE.OK, "Health check passed", {

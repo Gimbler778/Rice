@@ -4,7 +4,6 @@ import { z } from "zod";
 
 import { db } from "@/db/client";
 import {
-  entryCategories,
   entrySources,
   entryStatuses,
   timesheetEntry,
@@ -25,13 +24,13 @@ const isoDateSchema = z
 const listEntriesQuerySchema = z.object({
   from: isoDateSchema.optional(),
   to: isoDateSchema.optional(),
-  category: z.enum(entryCategories).optional(),
+  category: z.string().min(1).optional(),
   status: z.enum(entryStatuses).optional(),
 });
 
 const createEntrySchema = z.object({
   date: isoDateSchema,
-  category: z.enum(entryCategories),
+  category: z.string().min(1),
   description: z.string().trim().min(1).max(500),
   jiraIssueKey: z.string().trim().min(1).max(50).optional(),
   source: z.enum(entrySources).optional(),
@@ -42,7 +41,7 @@ const createEntrySchema = z.object({
 
 const updateEntrySchema = z
   .object({
-    category: z.enum(entryCategories).optional(),
+    category: z.string().min(1).optional(),
     description: z.string().trim().min(1).max(500).optional(),
     jiraIssueKey: z.string().trim().min(1).max(50).nullable().optional(),
     source: z.enum(entrySources).nullable().optional(),

@@ -46,12 +46,11 @@ import {
   type LearningEntry,
   type Suggestion,
   type CrossCheckPrompt,
-  CATEGORY_LABELS,
-  CATEGORY_BADGE_CLASSES,
 } from "@/types/timesheet";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import { tryCatch } from "@/lib/try-catch";
+import { useCategoryMapping } from "@/hooks/use-categories";
 import {
   copyYesterdayTimesheetEntries,
   createTimesheetEntry,
@@ -140,15 +139,16 @@ function MetricCard({ label, value, sub, valueClassName }: MetricCardProps) {
 
 // Category badge
 
-function CategoryBadge({ category }: { category: EntryCategory }) {
+function CategoryBadge({ category }: { category: string }) {
+  const { getCategoryName, getCategoryBadgeClass } = useCategoryMapping();
   return (
     <span
       className={cn(
         "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-        CATEGORY_BADGE_CLASSES[category]
+        getCategoryBadgeClass(category)
       )}
     >
-      {CATEGORY_LABELS[category]}
+      {getCategoryName(category)}
     </span>
   );
 }
@@ -162,6 +162,7 @@ interface EntryRowProps {
 }
 
 function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
+  const { enabledCategories } = useCategoryMapping();
   const [isEditing, setIsEditing] = useState(false);
   // Local edit state — only committed on save
   const [editValues, setEditValues] = useState({
@@ -223,9 +224,9 @@ function EntryRow({ entry, onDelete, onUpdate }: EntryRowProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(Object.keys(CATEGORY_LABELS) as EntryCategory[]).map((cat) => (
-                <SelectItem key={cat} value={cat} className="text-xs">
-                  {CATEGORY_LABELS[cat]}
+              {enabledCategories.map((cat) => (
+                <SelectItem key={cat.id} value={cat.id} className="text-xs">
+                  {cat.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -374,6 +375,7 @@ interface AddEntryRowProps {
 }
 
 function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
+  const { enabledCategories } = useCategoryMapping();
   const [values, setValues] = useState({
     category: "development" as EntryCategory,
     description: "",
@@ -419,9 +421,9 @@ function AddEntryRow({ onAdd, onCancel }: AddEntryRowProps) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {(Object.keys(CATEGORY_LABELS) as EntryCategory[]).map((cat) => (
-              <SelectItem key={cat} value={cat} className="text-xs">
-                {CATEGORY_LABELS[cat]}
+            {enabledCategories.map((cat) => (
+              <SelectItem key={cat.id} value={cat.id} className="text-xs">
+                {cat.name}
               </SelectItem>
             ))}
           </SelectContent>
