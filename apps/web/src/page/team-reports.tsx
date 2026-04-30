@@ -42,22 +42,9 @@ const STATUS_COLORS: Record<string, string> = {
   Unknown: "var(--muted-foreground)",
 };
 
-const TYPE_COLORS: Record<string, string> = {
-  Bug: "var(--destructive)",
-  Story: "var(--chart-1)",
-  Task: "var(--chart-2)",
-  "Sub-task": "var(--chart-4)",
-  Epic: "var(--chart-5)",
-  "Bitbucket items (PRs/Commits/Merges)": "var(--chart-3)",
-  Unknown: "var(--muted-foreground)",
-};
 
 function getStatusColor(status: string): string {
   return STATUS_COLORS[status] ?? "var(--primary)";
-}
-
-function getTypeColor(type: string): string {
-  return TYPE_COLORS[type] ?? "var(--secondary)";
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -94,6 +81,11 @@ function getCategoryColor(cat: string): string {
 
 function formatCategoryLabel(cat: string): string {
   return CATEGORY_LABELS[cat] ?? cat;
+}
+
+function formatProjectLabel(project: string): string {
+  if (project === "Unknown") return "Other workspaces";
+  return project;
 }
 
 // ── Utility ────────────────────────────────────────────────────────
@@ -744,22 +736,6 @@ export function TeamReportsPage() {
 
             <Card className="border-border/60 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Time by issue type</CardTitle>
-                <CardDescription>Time spent across issue types</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <DonutChart
-                  data={report.timeByType}
-                  colorFn={getTypeColor}
-                  centerLabel={formatDuration(report.totalTimeSpentSeconds)}
-                  centerSub="total"
-                  valueFormatter={formatDuration}
-                />
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/60 shadow-sm">
-              <CardHeader className="pb-3">
                 <CardTitle className="text-base">Time by project</CardTitle>
                 <CardDescription>Time logged per project</CardDescription>
               </CardHeader>
@@ -768,6 +744,7 @@ export function TeamReportsPage() {
                   data={report.timeByProject}
                   colorFn={() => "var(--primary)"}
                   valueFormatter={formatDuration}
+                  labelFormatter={formatProjectLabel}
                 />
               </CardContent>
             </Card>

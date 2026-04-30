@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import {
   fetchAllJiraIssues,
+  fetchCurrentJiraUser,
   isAtlassianUnauthorizedError,
   resolveJiraResources,
 } from "@/lib/jira";
@@ -393,8 +394,20 @@ async function fetchAtlassianEntriesWithRefresh(
     }
   }
 
-  const runJiraFetch = async () => fetchJiraEntries(atlassianAccessToken);
-  let jiraResult = await tryCatch(runJiraFetch());
+  
+  
+  const jiraResources = await resolveJiraResources(atlassianAccessToken).catch(() => []);
+  let currentUserAccountId: string | null = null;
+  if (jiraResources.length > 0) {
+    const { data: accountId } = await tryCatch(
+      fetchCurrentJiraUser(atlassianAccessToken, jiraResources[0].cloudId),
+    );
+    currentUserAccountId = accountId ?? null;
+    logger.info({ userId, jiraAccountId: currentUserAccountId }, "Resolved Jira accountId for user");
+  }
+
+  const runJiraFetch = async (token: string) => fetchJiraEntries(token, currentUserAccountId);
+  let jiraResult = await tryCatch(runJiraFetch(atlassianAccessToken));
 
   if (
     jiraResult.error &&
@@ -419,7 +432,7 @@ async function fetchAtlassianEntriesWithRefresh(
         );
       }
 
-      jiraResult = await tryCatch(runJiraFetch());
+      jiraResult = await tryCatch(runJiraFetch(atlassianAccessToken));
     } else {
       logger.warn(
         { err: refreshError, userId },
@@ -674,7 +687,10 @@ async function refreshBitbucketAccessToken(refreshToken: string) {
   return tokenPayload.access_token;
 }
 
-async function fetchJiraEntries(accessToken: string): Promise<DashboardEntry[]> {
+async function fetchJiraEntries(
+  accessToken: string,
+  currentUserAccountId?: string | null,
+): Promise<DashboardEntry[]> {
   const jiraResources = await resolveJiraResources(accessToken);
 
   if (!jiraResources.length) {
@@ -685,7 +701,7 @@ async function fetchJiraEntries(accessToken: string): Promise<DashboardEntry[]> 
 
   for (const { cloudId, jiraSiteUrl } of jiraResources) {
     try {
-      const { issues } = await fetchAllJiraIssues(accessToken, cloudId);
+      const { issues } = await fetchAllJiraIssues(accessToken, cloudId, currentUserAccountId);
 
       for (const issue of issues) {
         const timeSeconds = issue.timeSpentSeconds;
@@ -1264,6 +1280,16 @@ function isBitbucketEntry(row: { source: string | null; sourceLink?: string | nu
   return Boolean(row.sourceLink && /bitbucket\.org/i.test(row.sourceLink));
 }
 
+function resolveWorkspaceLabel(sourceLink?: string | null): string | null {
+  if (!sourceLink) return null;
+  try {
+    const hostname = new URL(sourceLink).hostname;
+    return hostname || null;
+  } catch {
+    return null;
+  }
+}
+
 function padIsoPart(value: number) {
   return String(value).padStart(2, "0");
 }
@@ -1574,6 +1600,7 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
         category: timesheetEntry.category,
         jiraIssueKey: timesheetEntry.jiraIssueKey,
         source: timesheetEntry.source,
+        sourceLink: timesheetEntry.sourceLink,
         description: timesheetEntry.description,
         atlassianName: timesheetEntry.atlassianName,
       })
@@ -1622,7 +1649,10 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
         aggregate.timeByProject[meta.project] = (aggregate.timeByProject[meta.project] ?? 0) + seconds;
       } else if (issueKey) {
         aggregate.timeByType["Unknown"] = (aggregate.timeByType["Unknown"] ?? 0) + seconds;
-        aggregate.timeByProject["Unknown"] = (aggregate.timeByProject["Unknown"] ?? 0) + seconds;
+        const fallbackProject =
+          resolveWorkspaceLabel(row.sourceLink) ?? "Other workspaces";
+        aggregate.timeByProject[fallbackProject] =
+          (aggregate.timeByProject[fallbackProject] ?? 0) + seconds;
       } else {
         const isBitbucket = isBitbucketEntry(row);
         let sourceLabel = "Unknown";
@@ -1630,12 +1660,15 @@ router.get("/integrations/team-report/:teamId", async (req, res) => {
           sourceLabel = row.source.charAt(0).toUpperCase() + row.source.slice(1);
         } else if (isBitbucket) {
           sourceLabel = "Bitbucket";
+        } else {
+          sourceLabel = resolveWorkspaceLabel(row.sourceLink) ?? "Other workspaces";
         }
 
         const typeLabel = isBitbucket ? BITBUCKET_TYPE_LABEL : "Unknown";
 
         aggregate.timeByType[typeLabel] = (aggregate.timeByType[typeLabel] ?? 0) + seconds;
-        aggregate.timeByProject[sourceLabel] = (aggregate.timeByProject[sourceLabel] ?? 0) + seconds;
+        aggregate.timeByProject[sourceLabel] =
+          (aggregate.timeByProject[sourceLabel] ?? 0) + seconds;
       }
     }
   }
