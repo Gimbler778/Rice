@@ -24,6 +24,27 @@ function buildPasswordResetRedirectUrl(): string {
   return url.toString();
 }
 
+function assertNoAuthError(response: unknown): void {
+  if (!response || typeof response !== "object") {
+    return;
+  }
+
+  if ("error" in response && response.error) {
+    const errorValue = response.error;
+    const message =
+      typeof errorValue === "string"
+        ? errorValue
+        : typeof errorValue === "object" &&
+            errorValue &&
+            "message" in errorValue &&
+            typeof errorValue.message === "string"
+          ? errorValue.message
+          : "Authentication failed";
+
+    throw new Error(message);
+  }
+}
+
 type AuthMode = "signin" | "signup" | "forgot" | "reset";
 
 export function LoginPage() {
@@ -61,33 +82,28 @@ export function LoginPage() {
 
   const signInMutation = useMutation({
     mutationFn: async () => {
-      await authClient.signIn.email({
+      const response = await authClient.signIn.email({
         email,
         password,
         callbackURL: buildDashboardCallbackUrl(),
       });
+      assertNoAuthError(response);
     },
     onError: (error) => {
-      if (error && typeof error === "object") {
-        const status = "status" in error ? Number(error.status) : undefined;
-        if (status === 403) {
-          toast.error("Verify your email before signing in.");
-          return;
-        }
-      }
-      toast.error("Sign in failed. Please check your credentials.");
+      toast.error("Authentication failed. Please try again.");
       console.error("Email sign in failed:", error);
     },
   });
 
   const signUpMutation = useMutation({
     mutationFn: async () => {
-      await authClient.signUp.email({
+      const response = await authClient.signUp.email({
         name,
         email,
         password,
         callbackURL: buildVerificationCallbackUrl(),
       });
+      assertNoAuthError(response);
     },
     onSuccess: () => {
       toast.success("Check your email to verify your account.");
@@ -95,34 +111,36 @@ export function LoginPage() {
       setPassword("");
     },
     onError: (error) => {
-      toast.error("Sign up failed. Please try again.");
+      toast.error("Authentication failed. Please try again.");
       console.error("Email sign up failed:", error);
     },
   });
 
   const forgotPasswordMutation = useMutation({
     mutationFn: async () => {
-      await authClient.requestPasswordReset({
+      const response = await authClient.requestPasswordReset({
         email,
         redirectTo: buildPasswordResetRedirectUrl(),
       });
+      assertNoAuthError(response);
     },
     onSuccess: () => {
       toast.success("If this email exists, a reset link has been sent.");
       setMode("signin");
     },
     onError: (error) => {
-      toast.error("Could not request password reset.");
+      toast.error("Authentication failed. Please try again.");
       console.error("Request password reset failed:", error);
     },
   });
 
   const resetPasswordMutation = useMutation({
     mutationFn: async () => {
-      await authClient.resetPassword({
+      const response = await authClient.resetPassword({
         token: resetToken,
         newPassword,
       });
+      assertNoAuthError(response);
     },
     onSuccess: () => {
       toast.success("Password updated. You can sign in now.");
@@ -130,23 +148,24 @@ export function LoginPage() {
       setMode("signin");
     },
     onError: (error) => {
-      toast.error("Password reset failed. Request a new reset link.");
+      toast.error("Authentication failed. Please try again.");
       console.error("Reset password failed:", error);
     },
   });
 
   const resendVerificationMutation = useMutation({
     mutationFn: async () => {
-      await authClient.sendVerificationEmail({
+      const response = await authClient.sendVerificationEmail({
         email,
         callbackURL: buildVerificationCallbackUrl(),
       });
+      assertNoAuthError(response);
     },
     onSuccess: () => {
       toast.success("Verification email sent.");
     },
     onError: (error) => {
-      toast.error("Could not send verification email.");
+      toast.error("Authentication failed. Please try again.");
       console.error("Send verification email failed:", error);
     },
   });

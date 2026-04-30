@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Users, AlertCircle, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,6 @@ import {
   fetchTeams,
   fetchTeamReport,
   type AtlassianTeam,
-  type TeamReportResponse,
   type TeamMemberAggregate,
 } from "@/api/teams-api";
 
@@ -115,7 +114,9 @@ function sortedEntries(record: Record<string, number>): [string, number][] {
 
 function createCsv(rows: string[][]): string {
   return rows
-    .map((row) => row.map((cell) => `"${cell.replaceAll("\"", "\"\"")}"`).join(","))
+    .map((row) =>
+      row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(","),
+    )
     .join("\n");
 }
 
@@ -239,7 +240,9 @@ function DonutChart({
                 className="size-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: colorFn(segment.key) }}
               />
-              <p className="flex-1 truncate text-sm" title={segment.key}>{labelFormatter(segment.key)}</p>
+              <p className="flex-1 truncate text-sm" title={segment.key}>
+                {labelFormatter(segment.key)}
+              </p>
               <p className="text-xs tabular-nums text-muted-foreground">
                 {valueFormatter(segment.value)}
               </p>
@@ -283,9 +286,13 @@ function HorizontalBarChart({
       {entries.map(([key, value]) => (
         <div key={key} className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm font-medium truncate" title={key}>{labelFormatter(key)}</p>
+            <p className="text-sm font-medium truncate" title={key}>
+              {labelFormatter(key)}
+            </p>
             <p className="text-xs tabular-nums text-muted-foreground shrink-0">
-              {valueFormatter ? valueFormatter(value) : `${value}${labelSuffix}`}
+              {valueFormatter
+                ? valueFormatter(value)
+                : `${value}${labelSuffix}`}
             </p>
           </div>
           <div className="flex h-2 overflow-hidden rounded-full bg-muted">
@@ -304,9 +311,7 @@ function HorizontalBarChart({
 }
 
 function MemberTable({ members }: { members: TeamMemberAggregate[] }) {
-  const sorted = [...members].sort(
-    (a, b) => b.totalIssues - a.totalIssues,
-  );
+  const sorted = [...members].sort((a, b) => b.totalIssues - a.totalIssues);
 
   if (sorted.length === 0) {
     return (
@@ -337,11 +342,11 @@ function MemberTable({ members }: { members: TeamMemberAggregate[] }) {
                     <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                       {member.displayName
                         ? member.displayName
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .toUpperCase()
-                          .slice(0, 2)
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .toUpperCase()
+                            .slice(0, 2)
                         : "?"}
                     </div>
                     <span className="font-medium truncate">
@@ -458,8 +463,7 @@ function TeamSelector({
                 }}
                 className={cn(
                   "flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent/50",
-                  selectedTeamId === team.teamId &&
-                  "bg-primary/5 text-primary",
+                  selectedTeamId === team.teamId && "bg-primary/5 text-primary",
                 )}
               >
                 <Users className="mt-0.5 size-4 shrink-0" />
@@ -522,15 +526,24 @@ export function TeamReportsPage() {
       [],
       ["Time by Category"],
       ["Category", "Time"],
-      ...sortedEntries(report.timeByCategory).map(([k, v]) => [formatCategoryLabel(k), formatDuration(v)]),
+      ...sortedEntries(report.timeByCategory).map(([k, v]) => [
+        formatCategoryLabel(k),
+        formatDuration(v),
+      ]),
       [],
       ["Time by Type"],
       ["Type", "Time"],
-      ...sortedEntries(report.timeByType).map(([k, v]) => [k, formatDuration(v)]),
+      ...sortedEntries(report.timeByType).map(([k, v]) => [
+        k,
+        formatDuration(v),
+      ]),
       [],
       ["Time by Project"],
       ["Project", "Time"],
-      ...sortedEntries(report.timeByProject).map(([k, v]) => [k, formatDuration(v)]),
+      ...sortedEntries(report.timeByProject).map(([k, v]) => [
+        k,
+        formatDuration(v),
+      ]),
       [],
       ["Members Breakdown"],
       ["Name", "Issues Updated", "Time Logged"],
@@ -698,10 +711,10 @@ export function TeamReportsPage() {
               value={
                 report.memberCount > 0
                   ? formatDuration(
-                    Math.round(
-                      report.totalTimeSpentSeconds / report.memberCount,
-                    ),
-                  )
+                      Math.round(
+                        report.totalTimeSpentSeconds / report.memberCount,
+                      ),
+                    )
                   : "0h"
               }
               sub="time logged"
@@ -712,9 +725,7 @@ export function TeamReportsPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="border-border/60 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">
-                  Time by category
-                </CardTitle>
+                <CardTitle className="text-base">Time by category</CardTitle>
                 <CardDescription>
                   Breakdown of logged hours by activity
                 </CardDescription>
@@ -733,12 +744,8 @@ export function TeamReportsPage() {
 
             <Card className="border-border/60 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">
-                  Time by issue type
-                </CardTitle>
-                <CardDescription>
-                  Time spent across issue types
-                </CardDescription>
+                <CardTitle className="text-base">Time by issue type</CardTitle>
+                <CardDescription>Time spent across issue types</CardDescription>
               </CardHeader>
               <CardContent>
                 <DonutChart
@@ -753,12 +760,8 @@ export function TeamReportsPage() {
 
             <Card className="border-border/60 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">
-                  Time by project
-                </CardTitle>
-                <CardDescription>
-                  Time logged per project
-                </CardDescription>
+                <CardTitle className="text-base">Time by project</CardTitle>
+                <CardDescription>Time logged per project</CardDescription>
               </CardHeader>
               <CardContent>
                 <HorizontalBarChart
@@ -771,11 +774,10 @@ export function TeamReportsPage() {
 
             <Card className="border-border/60 shadow-sm lg:col-span-2">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">
-                  Team members
-                </CardTitle>
+                <CardTitle className="text-base">Team members</CardTitle>
                 <CardDescription>
-                  Individual contribution breakdown for {PERIOD_LABELS[period].toLowerCase()}
+                  Individual contribution breakdown for{" "}
+                  {PERIOD_LABELS[period].toLowerCase()}
                 </CardDescription>
               </CardHeader>
               <CardContent>
