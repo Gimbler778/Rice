@@ -1,7 +1,7 @@
 import { api } from "@/lib/api-client";
 import type { ApiSuccessResponse } from "@/types/integrations";
 
-import type { AdminTeam, UserRole } from "@/page/admin/types";
+import type { AdminTeam, UserRole } from "@/lib/admin/types";
 
 export type AdminUserRecord = {
   id: string;

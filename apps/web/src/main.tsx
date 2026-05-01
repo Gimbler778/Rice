@@ -123,7 +123,6 @@ createRoot(document.getElementById("root")!).render(
                       element={<ProfileIntegrationPopupPage />}
                     />
                     <Route path="profile" element={<ProfilePage />} />
-                    <Route path="admin" element={<AdminPage />} />
                     <Route path="reports" element={<ReportsPage />} />
                     <Route
                       element={
@@ -131,6 +130,11 @@ createRoot(document.getElementById("root")!).render(
                       }
                     >
                       <Route path="reports/team" element={<TeamReportsPage />} />
+                    </Route>
+                    <Route
+                      element={<RouteProtector allowedRoles={["admin"]} unauthorizedTo="/today" />}
+                    >
+                      <Route path="admin" element={<AdminPage />} />
                     </Route>
                     <Route
                       path="dashboard"

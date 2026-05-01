@@ -58,6 +58,10 @@ export function PolicyTab({ policy, onPolicyChange, onSave }: PolicyTabProps) {
         description="Configure organisation-wide defaults for reminders, submission cadence, and data handling."
       />
 
+      <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+        Policy backend integration will be implemented soon. Changes here are local for now.
+      </div>
+
       <Card>
         <CardContent className="pt-4">
           <Field

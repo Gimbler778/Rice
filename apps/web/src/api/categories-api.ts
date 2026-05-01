@@ -1,5 +1,5 @@
 import { api } from "@/lib/api-client";
-import type { AdminCategory } from "@/page/admin/types";
+import type { AdminCategory } from "@/lib/admin/types";
 import type { ApiSuccessResponse } from "@/types/integrations";
 
 export type CategoriesResponse = {

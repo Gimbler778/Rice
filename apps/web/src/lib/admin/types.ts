@@ -26,8 +26,6 @@ export interface AdminTeam {
   managerId?: string | null;
 }
 
-
-
 export interface PolicySettings {
   dailyReminderTime: string;
   weeklyReminderDay: string;
@@ -37,8 +35,4 @@ export interface PolicySettings {
   lockAfterApproval: boolean;
 }
 
-export type AdminTab =
-  | "categories"
-  | "users"
-  | "teams"
-  | "policy";
+export type AdminTab = "categories" | "users" | "teams" | "policy";

@@ -2,8 +2,14 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-import { ROLE_BADGE } from "./mock-data";
 import type { UserRole } from "./types";
+
+const ROLE_BADGE: Record<UserRole, string> = {
+  admin: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  manager: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+  developer: "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300",
+  auditor: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+};
 
 type TabButtonProps = {
   icon: React.ElementType;

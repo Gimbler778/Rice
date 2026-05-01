@@ -10,11 +10,51 @@ import {
   adminTeamMember,
   user,
 } from "@/db/schema";
+import { auth } from "@/lib/auth";
+import logger from "@/lib/logger";
 import { RESPONSE_CODE, sendError, sendSuccess } from "@/lib/response";
+import { tryCatch } from "@/lib/try-catch";
 
 const router = express.Router();
 
 const allowedRoles = ["developer", "manager", "admin", "auditor"] as const;
+
+function toWebHeaders(headers: Record<string, string | string[] | undefined>): Headers {
+  const webHeaders = new Headers();
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value === "string") {
+      webHeaders.set(key, value);
+    } else if (Array.isArray(value)) {
+      webHeaders.set(key, value.join(", "));
+    }
+  }
+  return webHeaders;
+}
+
+router.use(async (req, res, next) => {
+  const { data: session, error } = await tryCatch(
+    auth.api.getSession({ headers: toWebHeaders(req.headers) }),
+  );
+
+  if (error) {
+    logger.error({ err: error }, "Failed to resolve auth session for admin route");
+    return sendError(
+      res,
+      RESPONSE_CODE.INTERNAL_SERVER_ERROR,
+      "Failed to resolve auth session",
+    );
+  }
+
+  if (!session?.user?.id) {
+    return sendError(res, RESPONSE_CODE.UNAUTHORIZED, "Unauthorized");
+  }
+
+  if (session.user.role !== "admin") {
+    return sendError(res, RESPONSE_CODE.FORBIDDEN, "Admin access required");
+  }
+
+  return next();
+});
 
 function normalizeUser(userRow: {
   id: string;

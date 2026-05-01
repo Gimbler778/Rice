@@ -39,7 +39,9 @@ export function TeamsTab({
   const [showAdd, setShowAdd] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamManager, setNewTeamManager] = useState<string | null>(null);
-  const [projectDrafts, setProjectDrafts] = useState<Record<string, string>>({});
+  const [projectDrafts, setProjectDrafts] = useState<Record<string, string>>(
+    {},
+  );
 
   const handleAddTeam = () => {
     const trimmed = newTeamName.trim();
@@ -83,7 +85,10 @@ export function TeamsTab({
               onKeyDown={(event) => event.key === "Enter" && handleAddTeam()}
             />
             <div className="w-48">
-              <Select value={newTeamManager ?? ""} onValueChange={(v) => setNewTeamManager(v || null)}>
+              <Select
+                value={newTeamManager ?? ""}
+                onValueChange={(v) => setNewTeamManager(v || null)}
+              >
                 <SelectTrigger className="h-8 text-sm w-full text-left">
                   <SelectValue placeholder="Select manager" />
                 </SelectTrigger>
@@ -91,10 +96,10 @@ export function TeamsTab({
                   {users
                     .filter((u) => u.role === "manager" || u.role === "admin")
                     .map((u) => (
-                    <SelectItem key={u.id} value={u.id} className="text-sm">
-                      {u.name} {u.role === "admin" ? "(admin)" : "(manager)"}
-                    </SelectItem>
-                  ))}
+                      <SelectItem key={u.id} value={u.id} className="text-sm">
+                        {u.name} {u.role === "admin" ? "(admin)" : "(manager)"}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -122,9 +127,14 @@ export function TeamsTab({
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-sm font-medium">{team.name}</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  {team.name}
+                </CardTitle>
                 {team.managerId && (
-                  <div className="text-xs text-muted-foreground">Manager: {users.find((u) => u.id === team.managerId)?.name ?? "-"}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Manager:{" "}
+                    {users.find((u) => u.id === team.managerId)?.name ?? "-"}
+                  </div>
                 )}
               </div>
               <Button
@@ -146,7 +156,10 @@ export function TeamsTab({
                 <Input
                   value={projectDrafts[team.id] ?? ""}
                   onChange={(event) =>
-                    setProjectDrafts((prev) => ({ ...prev, [team.id]: event.target.value }))
+                    setProjectDrafts((prev) => ({
+                      ...prev,
+                      [team.id]: event.target.value,
+                    }))
                   }
                   placeholder="Project name"
                   className="h-7 w-32 text-xs"
@@ -171,7 +184,9 @@ export function TeamsTab({
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Members</p>
+            <p className="text-xs font-medium text-muted-foreground mb-2">
+              Members
+            </p>
             <div className="flex flex-wrap gap-2">
               {users.map((user) => {
                 const isMember = team.memberIds.includes(user.id);
