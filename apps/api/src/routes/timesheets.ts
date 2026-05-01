@@ -16,6 +16,8 @@ import { auth } from "@/lib/auth";
 import logger from "@/lib/logger";
 import { RESPONSE_CODE, sendError, sendSuccess } from "@/lib/response";
 import { tryCatch } from "@/lib/try-catch";
+import { createNotification, createNotifications } from "@/lib/notifications";
+import { user, adminTeam, adminTeamMember } from "@/db/schema";
 
 const router = Router();
 
@@ -765,6 +767,36 @@ router.post("/timesheets/week/submit", async (req, res) => {
     result = created[0];
   }
 
+  // Notify managers about the submitted report (fire-and-forget)
+  try {
+    const developerUser = await db.query.user.findFirst({
+      where: eq(user.id, sessionResult.userId),
+      columns: { name: true },
+    });
+    // Find manager(s) for this developer
+    const teamMembers = await db
+      .select({ teamId: adminTeamMember.teamId })
+      .from(adminTeamMember)
+      .where(eq(adminTeamMember.userId, sessionResult.userId));
+    const teamIds = teamMembers.map((tm) => tm.teamId);
+    if (teamIds.length > 0) {
+      const { inArray } = await import("drizzle-orm");
+      const teams = await db
+        .select({ managerId: adminTeam.managerId })
+        .from(adminTeam)
+        .where(inArray(adminTeam.id, teamIds));
+      const managerIds = [...new Set(teams.map((t) => t.managerId))];
+      await createNotifications(
+        managerIds.map((managerId) => ({
+          type: "report_submitted" as const,
+          userId: managerId,
+          developerName: developerUser?.name ?? "A developer",
+          weekStartDate: parsedBody.data.weekStartDate,
+        })),
+      );
+    }
+  } catch { /* non-critical */ }
+
   return sendSuccess(res, RESPONSE_CODE.OK, "Week submitted", result);
 });
 
@@ -877,6 +909,23 @@ router.patch("/timesheets/week/:weekStartDate/approve", async (req, res) => {
     return sendError(res, RESPONSE_CODE.NOT_FOUND, "Week submission not found");
   }
 
+  // Notify the developer(s) whose report was approved (fire-and-forget)
+  try {
+    const approverUser = await db.query.user.findFirst({
+      where: eq(user.id, sessionResult.userId),
+      columns: { name: true },
+    });
+    await createNotifications(
+      updated.map((sub) => ({
+        type: "report_approved" as const,
+        userId: sub.userId,
+        weekStartDate: sub.weekStartDate,
+        managerName: approverUser?.name ?? "Your manager",
+        comment: parsedBody.data.approverComment,
+      })),
+    );
+  } catch { /* non-critical */ }
+
   return sendSuccess(res, RESPONSE_CODE.OK, "Week approved", updated[0]);
 });
 
@@ -937,6 +986,23 @@ router.patch("/timesheets/week/:weekStartDate/dismiss", async (req, res) => {
   if (updated.length === 0) {
     return sendError(res, RESPONSE_CODE.NOT_FOUND, "Week submission not found");
   }
+
+  // Notify the developer(s) whose report was dismissed (fire-and-forget)
+  try {
+    const dismisserUser = await db.query.user.findFirst({
+      where: eq(user.id, sessionResult.userId),
+      columns: { name: true },
+    });
+    await createNotifications(
+      updated.map((sub) => ({
+        type: "report_dismissed" as const,
+        userId: sub.userId,
+        weekStartDate: sub.weekStartDate,
+        managerName: dismisserUser?.name ?? "Your manager",
+        comment: parsedBody.data.dismissComment,
+      })),
+    );
+  } catch { /* non-critical */ }
 
   return sendSuccess(res, RESPONSE_CODE.OK, "Week dismissed", updated[0]);
 });

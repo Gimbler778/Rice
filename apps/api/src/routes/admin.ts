@@ -11,6 +11,8 @@ import {
   user,
 } from "@/db/schema";
 import { RESPONSE_CODE, sendError, sendSuccess } from "@/lib/response";
+import { auth } from "@/lib/auth";
+import { createNotification, createNotifications } from "@/lib/notifications";
 
 const router = express.Router();
 
@@ -136,6 +138,23 @@ router.patch("/users/:id/role", async (req, res) => {
 
     await db.update(user).set({ role: role as (typeof allowedRoles)[number] }).where(eq(user.id, id));
 
+    // Notify admins about the role change (fire-and-forget)
+    try {
+      const allAdmins = await db
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.role, "admin"));
+      await createNotifications(
+        allAdmins.map((admin) => ({
+          type: "role_changed" as const,
+          userId: admin.id,
+          targetUserName: targetUser.name,
+          oldRole: targetUser.role ?? "developer",
+          newRole: role,
+        })),
+      );
+    } catch { /* non-critical */ }
+
     return sendSuccess(res, RESPONSE_CODE.OK, "Role updated", { id, role });
   } catch (error) {
     return sendError(
@@ -210,6 +229,35 @@ router.post("/teams", async (req, res) => {
     const teams = await getTeamsResponse();
     const created = teams.find((team) => team.id === teamId);
 
+    // Notify members and manager (fire-and-forget)
+    try {
+      const managerRow = await db.query.user.findFirst({ where: eq(user.id, managerId), columns: { name: true } });
+      const session = await auth.api.getSession({ headers: req.headers as unknown as Headers });
+      const adminName = session?.user?.name ?? "An admin";
+      const members = await db
+        .select({ id: adminTeamMember.userId })
+        .from(adminTeamMember)
+        .where(eq(adminTeamMember.teamId, teamId));
+      const memberNotifications = members
+        .filter((m) => m.id !== managerId)
+        .map((m) => ({
+          type: "team_assigned" as const,
+          userId: m.id,
+          teamName: name.trim(),
+          managerName: managerRow?.name ?? "your manager",
+          assignedBy: adminName,
+        }));
+      await createNotifications([
+        ...memberNotifications,
+        {
+          type: "manager_assigned" as const,
+          userId: managerId,
+          managerName: managerRow?.name ?? "you",
+          teamName: name.trim(),
+        },
+      ]);
+    } catch { /* non-critical */ }
+
     return sendSuccess(res, RESPONSE_CODE.CREATED, "Team created", { team: created });
   } catch (error) {
     return sendError(
@@ -278,6 +326,44 @@ router.patch("/teams/:id", async (req, res) => {
 
     const teams = await getTeamsResponse();
     const updated = teams.find((team) => team.id === id);
+
+    // Notify affected members / new manager (fire-and-forget)
+    try {
+      const effectiveManagerId = managerId || existingTeam.managerId;
+      const teamName = name?.trim() || existingTeam.name;
+      const managerRow = await db.query.user.findFirst({ where: eq(user.id, effectiveManagerId), columns: { name: true } });
+      const session = await auth.api.getSession({ headers: req.headers as unknown as Headers });
+      const adminName = session?.user?.name ?? "An admin";
+      const notifInputs = [];
+
+      // New manager notification
+      if (managerId && managerId !== existingTeam.managerId) {
+        notifInputs.push({
+          type: "manager_assigned" as const,
+          userId: managerId,
+          managerName: managerRow?.name ?? "you",
+          teamName,
+        });
+      }
+
+      // Newly added members notification
+      if (Array.isArray(memberIds)) {
+        const newMembers = memberIds.filter((uid) => uid !== effectiveManagerId);
+        for (const uid of newMembers) {
+          notifInputs.push({
+            type: "team_assigned" as const,
+            userId: uid,
+            teamName,
+            managerName: managerRow?.name ?? "your manager",
+            assignedBy: adminName,
+          });
+        }
+      }
+
+      if (notifInputs.length > 0) {
+        await createNotifications(notifInputs);
+      }
+    } catch { /* non-critical */ }
 
     return sendSuccess(res, RESPONSE_CODE.OK, "Team updated", { team: updated });
   } catch (error) {
