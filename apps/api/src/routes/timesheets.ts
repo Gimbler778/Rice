@@ -964,7 +964,7 @@ router.patch("/timesheets/week/:weekStartDate/dismiss", async (req, res) => {
     db
       .update(weeklySubmission)
       .set({
-        status: "dismissed",
+        status: "draft",
         dismissedBy: sessionResult.userId,
         dismissComment: parsedBody.data.dismissComment,
         updatedAt: new Date(),
