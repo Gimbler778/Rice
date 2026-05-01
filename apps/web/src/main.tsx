@@ -99,7 +99,7 @@ createRoot(document.getElementById("root")!).render(
     }}
   >
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="system">
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <BrowserRouter>
             <Toaster position="top-center" richColors />

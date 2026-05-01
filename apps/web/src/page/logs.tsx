@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchTimesheetEntries } from "@/api/timesheets-api";
 import { authClient } from "@/lib/auth-client";
-import { CATEGORY_LABELS, type EntryCategory, type EntryStatus } from "@/types/timesheet";
+import { useCategoryMapping } from "@/hooks/use-categories";
+import { type EntryCategory, type EntryStatus } from "@/types/timesheet";
 
 type LogEntry = {
   id: string;
@@ -19,19 +20,6 @@ type LogEntry = {
 
 const PAGE_SIZE = 10;
 
-const ALL_CATEGORIES: EntryCategory[] = [
-  "development",
-  "code_review",
-  "testing",
-  "documentation",
-  "meetings",
-  "admin",
-  "org_sessions",
-  "events",
-  "support",
-  "learning",
-  "manual_other",
-];
 
 function formatDateInput(date: Date): string {
   const year = date.getFullYear();
@@ -63,18 +51,10 @@ function statusBadgeClass(status: EntryStatus): string {
   return "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300";
 }
 
-function categoryBadgeClass(category: EntryCategory): string {
-  if (category === "development") return "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300";
-  if (category === "code_review") return "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300";
-  if (category === "testing") return "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300";
-  if (category === "documentation") return "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300";
-  if (category === "meetings") return "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
-  return "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
-}
-
 export function LogsPage() {
   const { data: session, isPending: isSessionPending } = authClient.useSession();
   const isAuthenticated = Boolean(session?.user?.id);
+  const { categories, getCategoryName, getCategoryBadgeClass } = useCategoryMapping();
 
   const today = useMemo(() => new Date(), []);
   const defaultTo = formatDateInput(today);
@@ -119,7 +99,7 @@ export function LogsPage() {
         const matchSearch =
           searchValue.length === 0 ||
           entry.description.toLowerCase().includes(searchValue) ||
-          CATEGORY_LABELS[entry.category].toLowerCase().includes(searchValue) ||
+          getCategoryName(entry.category).toLowerCase().includes(searchValue) ||
           entry.status.toLowerCase().includes(searchValue) ||
           entry.date.includes(searchValue);
 
@@ -223,9 +203,9 @@ export function LogsPage() {
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="all">All categories</option>
-                {ALL_CATEGORIES.map((item) => (
-                  <option key={item} value={item}>
-                    {CATEGORY_LABELS[item]}
+                {categories.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
                   </option>
                 ))}
               </select>
@@ -285,8 +265,8 @@ export function LogsPage() {
                         <td className="px-3 py-2.5">{toDisplayDate(entry.date)}</td>
                         <td className="px-3 py-2.5">{entry.description}</td>
                         <td className="px-3 py-2.5">
-                          <Badge className={categoryBadgeClass(entry.category)}>
-                            {CATEGORY_LABELS[entry.category]}
+                          <Badge className={getCategoryBadgeClass(entry.category)}>
+                            {getCategoryName(entry.category)}
                           </Badge>
                         </td>
                         <td className="px-3 py-2.5">{entry.hours}h</td>
