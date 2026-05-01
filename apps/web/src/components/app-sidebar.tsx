@@ -200,7 +200,11 @@ export function AppSidebar() {
       <SidebarHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 px-2 py-1 group-data-[collapsible=icon]:hidden">
-            <div className="size-2 rounded-full bg-primary shrink-0" />
+            <img
+              src="/favicon_io/favicon-32x32.png"
+              alt="RICE"
+              className="size-4 shrink-0 rounded-sm"
+            />
             <span className="font-semibold text-sm tracking-wide">
               RICE
             </span>
