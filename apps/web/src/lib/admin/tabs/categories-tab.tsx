@@ -10,6 +10,27 @@ import { Check, Pencil, Plus, X, Trash2 } from "lucide-react";
 import type { AdminCategory } from "../types";
 import { SectionHeader } from "../ui";
 
+const CATEGORY_DOT_COLORS: Record<string, string> = {
+  "bg-teal-500": "#14b8a6",
+  "bg-purple-500": "#a855f7",
+  "bg-blue-400": "#60a5fa",
+  "bg-blue-500": "#3b82f6",
+  "bg-amber-400": "#fbbf24",
+  "bg-cyan-400": "#22d3ee",
+  "bg-cyan-500": "#06b6d4",
+  "bg-indigo-500": "#6366f1",
+  "bg-pink-400": "#f472b6",
+  "bg-orange-400": "#fb923c",
+  "bg-orange-500": "#f97316",
+  "bg-red-400": "#f87171",
+  "bg-green-400": "#4ade80",
+  "bg-emerald-500": "#10b981",
+};
+
+function getCategoryDotColor(colorClass: string) {
+  return CATEGORY_DOT_COLORS[colorClass] ?? "#6b7280";
+}
+
 type CategoriesTabProps = {
   categories: AdminCategory[];
   onToggleCategory: (id: string) => void;
@@ -91,7 +112,7 @@ export function CategoriesTab({
               {showAdd && (
                 <tr className="border-b bg-teal-50/40 dark:bg-teal-950/20">
                   <td className="px-4 py-2">
-                    <div className="size-3 rounded-full bg-zinc-400" />
+                    <div className="size-3 rounded-full" style={{ backgroundColor: "#06b6d4" }} />
                   </td>
                   <td className="px-4 py-2">
                     <Input
@@ -135,7 +156,10 @@ export function CategoriesTab({
                   )}
                 >
                   <td className="px-4 py-2.5">
-                    <div className={cn("size-3 rounded-full", category.color)} />
+                    <div
+                      className="size-3 rounded-full"
+                      style={{ backgroundColor: getCategoryDotColor(category.color) }}
+                    />
                   </td>
 
                   <td className="px-4 py-2.5">

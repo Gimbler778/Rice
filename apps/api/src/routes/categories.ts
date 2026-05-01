@@ -16,13 +16,56 @@ const DEFAULT_CATEGORIES = [
   { id: "code_review", name: "Code review", color: "bg-purple-500", isDefault: true, isEnabled: true },
   { id: "testing", name: "Testing", color: "bg-blue-400", isDefault: true, isEnabled: true },
   { id: "documentation", name: "Documentation", color: "bg-amber-400", isDefault: true, isEnabled: true },
-  { id: "meetings", name: "Meetings", color: "bg-zinc-400", isDefault: true, isEnabled: true },
-  { id: "admin", name: "Admin", color: "bg-zinc-500", isDefault: true, isEnabled: true },
+  { id: "meetings", name: "Meetings", color: "bg-cyan-400", isDefault: true, isEnabled: true },
+  { id: "admin", name: "Admin", color: "bg-indigo-500", isDefault: true, isEnabled: true },
   { id: "org_sessions", name: "Org sessions", color: "bg-pink-400", isDefault: true, isEnabled: true },
   { id: "events", name: "Events", color: "bg-orange-400", isDefault: true, isEnabled: true },
   { id: "support", name: "Support", color: "bg-red-400", isDefault: true, isEnabled: true },
   { id: "learning", name: "Learning", color: "bg-green-400", isDefault: true, isEnabled: true },
 ];
+
+const CUSTOM_CATEGORY_COLORS = [
+  "bg-teal-500",
+  "bg-purple-500",
+  "bg-blue-500",
+  "bg-emerald-500",
+  "bg-cyan-500",
+  "bg-indigo-500",
+  "bg-orange-500",
+  "bg-pink-500",
+];
+
+const LEGACY_DARK_COLOR_MAP: Record<string, string> = {
+  "bg-zinc-400": "bg-cyan-400",
+  "bg-zinc-500": "bg-indigo-500",
+  "bg-zinc-600": "bg-indigo-600",
+  "bg-zinc-700": "bg-indigo-700",
+  "bg-zinc-800": "bg-indigo-700",
+  "bg-zinc-900": "bg-indigo-700",
+  "bg-black": "bg-indigo-700",
+};
+
+function normalizeCategoryColor(color: string) {
+  const mapped = LEGACY_DARK_COLOR_MAP[color];
+  if (mapped) {
+    return mapped;
+  }
+
+  // Guard against other dark palette classes that may exist in old rows.
+  if (/^bg-(zinc|neutral|stone|slate|gray|black)/.test(color)) {
+    return "bg-indigo-500";
+  }
+
+  return color;
+}
+
+function pickCustomCategoryColor(name: string) {
+  let hash = 0;
+  for (const ch of name) {
+    hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  }
+  return CUSTOM_CATEGORY_COLORS[hash % CUSTOM_CATEGORY_COLORS.length];
+}
 
 async function resolveSessionUserId(req: any) {
   try {
@@ -69,7 +112,14 @@ router.get("/categories", async (req, res) => {
     rows = inserted;
   }
 
-  return sendSuccess(res, RESPONSE_CODE.OK, "Categories fetched", { categories: rows });
+  const safeRows = rows ?? [];
+
+  const normalizedRows = safeRows.map((row) => ({
+    ...row,
+    color: normalizeCategoryColor(row.color),
+  }));
+
+  return sendSuccess(res, RESPONSE_CODE.OK, "Categories fetched", { categories: normalizedRows });
 });
 
 const createCategorySchema = z.object({
@@ -93,7 +143,7 @@ router.post("/categories", async (req, res) => {
     db.insert(categoryConfig).values({
       id: newId,
       name: parsedBody.data.name,
-      color: "bg-zinc-400", // Default color for custom categories
+      color: pickCustomCategoryColor(parsedBody.data.name),
       isDefault: false,
       isEnabled: true,
     }).returning()

@@ -43,6 +43,7 @@ const createEntrySchema = z.object({
   source: z.enum(entrySources).optional(),
   sourceLink: z.url().trim().max(2048).optional(),
   hours: z.number().positive().max(24),
+  startHour: z.number().min(0).max(23.5).optional(),
   timeRemaining: z.number().min(0).max(100).optional().default(0),
   status: z.enum(entryStatuses).optional(),
 });
@@ -55,6 +56,7 @@ const updateEntrySchema = z
     source: z.enum(entrySources).nullable().optional(),
     sourceLink: z.url().trim().max(2048).nullable().optional(),
     hours: z.number().positive().max(24).optional(),
+    startHour: z.number().min(0).max(23.5).optional(),
     timeRemaining: z.number().min(0).max(100).optional(),
     status: z.enum(entryStatuses).optional(),
   })
@@ -291,6 +293,7 @@ router.post("/timesheets/entries", async (req, res) => {
         source: parsedBody.data.source,
         sourceLink: parsedBody.data.sourceLink,
         hours: parsedBody.data.hours,
+        startHour: parsedBody.data.startHour ?? 9,
         timeRemaining: parsedBody.data.timeRemaining,
         atlassianName,
         status: parsedBody.data.status ?? "in-progress",
