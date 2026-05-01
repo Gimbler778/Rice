@@ -36,23 +36,10 @@ type TeamMembersResponse = {
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-/**
- * Resolve the Atlassian organization ID from the accessible-resources endpoint.
- * Each accessible resource has an `id` (cloudId) which maps back to an org.
- * However, the Teams API needs `orgId` — which is NOT the same as `cloudId`.
- * The orgId must be configured via ATLASSIAN_ORG_ID env var, or we can try
- * to resolve it from the /admin/v1/orgs endpoint if the user has admin access.
- */
-
 // ── API Functions ──────────────────────────────────────────────────
 
 const TEAMS_BASE = "https://api.atlassian.com/public/teams/v1";
 
-/**
- * Fetch all teams in an Atlassian organization.
- * GET /public/teams/v1/org/{orgId}/teams
- * Scope: read:team:jira
- */
 export async function fetchAllAtlassianTeams(
   accessToken: string,
   orgId: string,
@@ -97,11 +84,6 @@ export async function fetchAllAtlassianTeams(
   return allTeams;
 }
 
-/**
- * Fetch members of a specific team.
- * POST /public/teams/v1/org/{orgId}/teams/{teamId}/members
- * Scope: read:team:jira
- */
 export async function fetchTeamMembers(
   accessToken: string,
   orgId: string,
@@ -148,9 +130,6 @@ export async function fetchTeamMembers(
   return allMembers;
 }
 
-/**
- * Fetch all teams with their members.
- */
 export async function fetchTeamsWithMembers(
   accessToken: string,
   orgId: string,

@@ -6,4 +6,7 @@ export const queryKeys = {
     teamReport: (teamId: string, period?: string) =>
       ["integration-team-report", teamId, period ?? "week"] as const,
   },
+  notifications: {
+    all: () => ["notifications"] as const,
+  },
 } as const;

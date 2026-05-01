@@ -572,8 +572,7 @@ export function TeamReportsPage() {
             <div>
               <p className="font-medium">Failed to load teams</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Make sure Atlassian is connected and ATLASSIAN_ORG_ID is
-                configured in the server environment.
+                Make sure Atlassian is connected.
               </p>
             </div>
           </CardContent>

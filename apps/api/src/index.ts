@@ -12,6 +12,7 @@ import integrationsRouter from "./routes/integrations";
 import learningRouter from "./routes/learning";
 import timesheetsRouter from "./routes/timesheets";
 import adminRouter from "./routes/admin";
+import notificationsRouter from "./routes/notifications";
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.use("/api", timesheetsRouter);
 app.use("/api/integrations", integrationsRouter);
 app.use("/api/learning", learningRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/notifications", notificationsRouter);
 app.use("/api", categoriesRouter);
 
 app.get("/health", (_req, res) => {

@@ -7,6 +7,7 @@ import {
   LogOut,
   User,
   History,
+  Bell,
   Monitor,
 } from "lucide-react";
 import {
@@ -32,6 +33,7 @@ import { useTheme } from "@/lib/use-theme";
 import { authClient } from "@/lib/auth-client";
 import { type AppRole, getSessionUserRole } from "@/lib/roles";
 import { useNavigate } from "react-router-dom";
+import { useUnreadCount } from "@/hooks/use-notifications";
 
 // Nav config
 
@@ -50,6 +52,11 @@ const workspaceNav = [
     label: "Calendar view",
     href: "/calendar",
     icon: CalendarDays,
+  },
+  {
+    label: "Follow-ups",
+    href: "/follow-ups",
+    icon: Bell,
   },
   {
     label: "Logs history",
@@ -161,6 +168,7 @@ export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
+  const unreadCount = useUnreadCount(!!session?.user);
 
   const userRole = getSessionUserRole(session) ?? "developer";
 
@@ -209,9 +217,14 @@ export function AppSidebar() {
                     isActive={location.pathname === item.href}
                     tooltip={item.label}
                   >
-                    <Link to={item.href}>
-                      <item.icon />
-                      <span>{item.label}</span>
+                    <Link to={item.href} className="flex items-center w-full justify-between">
+                      <div className="flex items-center gap-2">
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.label === "Follow-ups" && unreadCount > 0 && (
+                        <div className="size-2 rounded-full bg-blue-500 mr-2 shrink-0 group-data-[collapsible=icon]:hidden" />
+                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

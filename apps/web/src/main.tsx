@@ -57,6 +57,11 @@ const ReportsPage = lazy(async () => ({
 const TeamReportsPage = lazy(async () => ({
   default: (await import("@/page/team-reports")).TeamReportsPage,
 }));
+
+const FollowUpsPage = lazy(async () => ({
+  default: (await import("@/page/follow-ups")).FollowUpsPage,
+}));
+
 const NotFoundPage = () => {
   return (
     <PageContainer className="min-h-screen min-w-screen flex justify-center items-center gap-5 text-4xl">
@@ -117,6 +122,7 @@ createRoot(document.getElementById("root")!).render(
                     <Route path="calendar" element={<CalendarPage />} />
                     <Route path="today" element={<TodayPage />} />
                     <Route path="week" element={<WeekPage />} />
+                    <Route path="follow-ups" element={<FollowUpsPage />} />
                     <Route path="logs" element={<LogsPage />} />
                     <Route
                       path="profile/integration-popup"

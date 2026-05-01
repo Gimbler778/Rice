@@ -51,15 +51,6 @@ async function resolveSessionUserId(reqHeaders: Record<string, string | string[]
   return { ok: true, userId: session.user.id } as const;
 }
 
-/**
- * Compute the current learning streak for a user up to (and including) `fromDate`.
- *
- * Rules:
- *  - Weekends (Sat/Sun) are skipped — a gap over a weekend does NOT break the streak.
- *  - A day counts if a learning_entry row exists for it with a non-empty title.
- *  - Editing past days does NOT retroactively extend the streak; only consecutive
- *    days going backwards from `fromDate` are counted.
- */
 async function computeStreak(userId: string, fromDate: string): Promise<number> {
   // Fetch all entries for this user (title may be empty — filter those out)
   const { data: rows, error } = await tryCatch(
