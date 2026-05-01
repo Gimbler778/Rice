@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 
 import { db } from "@/db/client";
-import { account, timesheetEntry } from "@/db/schema";
+import { account, adminTeam, adminTeamMember, timesheetEntry, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import {
@@ -1694,16 +1694,91 @@ router.get("/team-report/:teamId", async (req, res) => {
     );
   }
 
+  // ── Resolve requesting user's role and team-member scope ──────────
+  // Fetch the current user's role to decide whether to filter by team membership.
+  const { data: requestingUser } = await tryCatch(
+    db
+      .select({ role: user.role })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
+  );
+
+  // Managers can only view their own team's members.
+  // Admins and auditors see everyone.
+  let allowedUserIds: string[] | null = null; // null = no restriction
+
+  if (requestingUser?.role === "manager") {
+    // Find the team where this manager is the assigned manager
+    const { data: managerTeam } = await tryCatch(
+      db
+        .select({ id: adminTeam.id })
+        .from(adminTeam)
+        .where(eq(adminTeam.managerId, userId))
+        .limit(1)
+        .then((rows) => rows[0] ?? null),
+    );
+
+    if (managerTeam) {
+      const { data: teamMemberRows } = await tryCatch(
+        db
+          .select({ userId: adminTeamMember.userId })
+          .from(adminTeamMember)
+          .where(eq(adminTeamMember.teamId, managerTeam.id)),
+      );
+      allowedUserIds = (teamMemberRows ?? []).map((r) => r.userId);
+    } else {
+      // Manager has no configured team — show nothing
+      allowedUserIds = [];
+    }
+
+    // Filter out any already-aggregated Jira member data that isn't in the allowed list.
+    // We need the internal DB user IDs, so we get them after mapping below.
+  }
+
   // 4. Map Jira account IDs to internal DB users to fetch their timesheets
   const { data: mappedAccounts } = await tryCatch(
     db
       .select({ userId: account.userId, accountId: account.accountId })
       .from(account)
-      .where(eq(account.providerId, "atlassian"))
+      .where(
+        allowedUserIds !== null && allowedUserIds.length > 0
+          ? and(eq(account.providerId, "atlassian"), inArray(account.userId, allowedUserIds))
+          : allowedUserIds !== null
+            ? and(eq(account.providerId, "atlassian"), eq(account.userId, "")) // empty set
+            : eq(account.providerId, "atlassian"),
+      )
   );
+
+  // If manager-scoped, remove any Jira-aggregated members whose accountId is not in the
+  // mapped set (i.e., not one of the allowed DB users).
+  if (allowedUserIds !== null) {
+    const allowedAccountIds = new Set((mappedAccounts ?? []).map((a) => a.accountId));
+    for (const [accountId] of memberAggregates) {
+      if (!allowedAccountIds.has(accountId)) {
+        memberAggregates.delete(accountId);
+      }
+    }
+  }
 
   // After aggregating Jira issues, fetch timesheet entries per member and add time
   // Also fetch all timesheets for mapped accounts in this period to ensure we include members with 0 issues
+  const tsWhereClause =
+    allowedUserIds !== null && allowedUserIds.length > 0
+      ? and(
+          gte(timesheetEntry.date, fromDateString),
+          lte(timesheetEntry.date, toDateString),
+          inArray(timesheetEntry.userId, allowedUserIds),
+        )
+      : allowedUserIds !== null
+        ? and(
+            gte(timesheetEntry.date, fromDateString),
+            lte(timesheetEntry.date, toDateString),
+            eq(timesheetEntry.userId, ""), // empty set — returns nothing
+          )
+        : and(gte(timesheetEntry.date, fromDateString), lte(timesheetEntry.date, toDateString));
+
   const { data: tsRows, error: tsError } = await tryCatch(
     db
       .select({
@@ -1717,7 +1792,7 @@ router.get("/team-report/:teamId", async (req, res) => {
         atlassianName: timesheetEntry.atlassianName,
       })
       .from(timesheetEntry)
-      .where(and(gte(timesheetEntry.date, fromDateString), lte(timesheetEntry.date, toDateString)))
+      .where(tsWhereClause)
   );
 
   if (!tsError && tsRows) {
