@@ -225,7 +225,9 @@ Tables are defined in `apps/api/src/db/schema/` and managed with Drizzle Kit.
 
 ## Deployment
 
-Both apps are Vercel-ready:
+> **Note:** The application was previously deployed on Railway (API) and Netlify (frontend), but the free plans were exhausted, so the live deployments are currently **down**.
+
+The project is platform-agnostic and Vercel-ready:
 
 - `apps/web/vercel.json` configures SPA route rewriting for the React app.
 - Render the API as a separate service on the platform of your choice; point `VITE_SERVER_BASE_URL` and `BETTER_AUTH_URL` at the deployed API domain and `CORS_ORIGIN` at the deployed frontend origin.
