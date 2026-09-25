@@ -294,7 +294,7 @@ export function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>
-            {isForgotMode ? "Reset your password" : "Welcome to IQM Rice"}
+            {isForgotMode ? "Reset your password" : "Welcome to Rice"}
           </CardTitle>
           <CardDescription>
             {isForgotMode

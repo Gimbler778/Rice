@@ -1,6 +1,6 @@
-# IQM Rice — Timesheet & Work Tracking
+# Rice — Timesheet & Work Tracking
 
-A production-ready, full-stack monorepo for timesheet capture, weekly submission and manager approval. IQM Rice tracks engineering time across categories, links entries to Atlassian (Jira) and Bitbucket activity, and exposes role-based workflows for developers, managers, admins and auditors.
+A production-ready, full-stack monorepo for timesheet capture, weekly submission and manager approval. Rice tracks engineering time across categories, links entries to Atlassian (Jira) and Bitbucket activity, and exposes role-based workflows for developers, managers, admins and auditors.
 
 ## Tech Stack
 
